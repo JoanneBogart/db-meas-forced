@@ -1,0 +1,503 @@
+/*Copyright (C) 2016-2018  Sogo Mineo
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+CREATE OR REPLACE FUNCTION
+  radec_to_coord
+  ( IN   ra      Float8
+  , IN   "dec"   Float8
+  , OUT  coord   Earth
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT public.ll_to_earth("dec", ra);
+$$;
+
+CREATE OR REPLACE FUNCTION
+  coord_to_ra
+  ( IN   coord   Earth
+  , OUT  ra      Float8
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    CASE
+      WHEN public.longitude(coord) < 0::Float8 THEN 360.0::Float8 + longitude(coord)
+      ELSE public.longitude(coord)
+    END
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  coord_to_dec
+  ( IN   coord   Earth
+  , OUT  "dec"   Float8
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    public.latitude(coord)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  skymap_from_object_id
+  ( IN   object_id Bigint
+  , OUT  skymap_id Integer
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    (  (object_id / 4398046511104)       * 10000 /* tract */
+    + ((object_id / 137438953472 ) % 32) * 100   /* patch_x */
+    + ((object_id / 4294967296   ) % 32)         /* patch_y */
+    )::Integer
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  tract_from_object_id
+  ( IN   object_id Bigint
+  , OUT  tract     Integer
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT (object_id / 4398046511104)::Integer;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  patch_from_object_id
+  ( IN   object_id Bigint
+  , OUT  patch     Integer
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    ( ((object_id / 137438953472) % 32) * 100   /* patch_x */
+    + ((object_id / 4294967296  ) % 32)         /* patch_y */
+    )::Integer
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  patch_s_from_object_id
+  ( IN   object_id Bigint
+  , OUT  patch_s   Text
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    (  ((object_id / 137438953472) % 32)::Text /* patch_x */
+    || ','
+    || ((object_id / 4294967296  ) % 32)::Text /* patch_y */
+    )
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  coneSearch
+  ( IN   coord   Earth
+  , IN   "ra"    Float8
+  , IN   "dec"   Float8
+  , IN   radius  Float8
+  , OUT  isIn    Boolean
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    coord IS NOT NULL
+    AND coord <@ earth_box(ll_to_earth("dec", "ra"), radius)
+    AND earth_distance(coord, ll_to_earth("dec", "ra")) <= radius
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  tractSearch
+  ( IN   object_id  Bigint
+  , IN   tract      Integer
+  , OUT  isIn       Boolean
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  -- object_id = (tract << 42) | (patch_x << 37) | (patch_y << 32) | (counter)
+  SELECT
+    object_id BETWEEN
+      ((tract::Bigint) * ('4398046511104'::Bigint))
+      AND ((tract::Bigint + 1) * ('4398046511104'::Bigint) - 1)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  tractSearch
+  ( IN   object_id    Bigint
+  , IN   tractStart   Integer
+  , IN   tractEnd     Integer
+  , OUT  isIn         Boolean
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  -- object_id = (tract << 42) | (patch_x << 37) | (patch_y << 32) | (counter)
+  SELECT
+    object_id BETWEEN
+      ((tractStart::Bigint) * ('4398046511104'::Bigint))
+      AND ((tractEnd::Bigint + 1) * ('4398046511104'::Bigint) - 1)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  tractSearch
+  ( IN   skymap_id   Integer
+  , IN   tract       Integer
+  , OUT  isIn        Boolean
+  )
+LANGUAGE PLPGSQL
+IMMUTABLE
+AS $$
+BEGIN
+  RAISE EXCEPTION 'tractSearch(skymap_id, ...) has been replaced by tractSearch(object_id, ...)';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  tractSearch
+  ( IN   skymap_id     Integer
+  , IN   tractStart    Integer
+  , IN   tractEnd      Integer
+  , OUT  isIn          Boolean
+  )
+LANGUAGE PLPGSQL
+IMMUTABLE
+AS $$
+BEGIN
+  RAISE 'tractSearch(skymap_id, ...) has been replaced by tractSearch(object_id, ...)';
+END
+$$;
+
+/** max cos(x) : a <= x <= b ; a,b in degrees
+*/
+CREATE OR REPLACE FUNCTION
+"internal:maxcos_deg" (IN a Float8, IN b Float8, OUT maxcos Float8)
+STRICT IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+SELECT
+  CASE
+    WHEN xmin <= 0 THEN
+      1
+    WHEN CAST(xmax AS Int8) / 360 - CAST(xmin AS Int8) / 360 >= 1 THEN
+      1
+    WHEN c_cos(xmin*0.017453292519943295) > c_cos(xmax*0.017453292519943295) THEN
+      c_cos(xmin*0.017453292519943295)
+    ELSE
+      c_cos(xmax*0.017453292519943295)
+  END
+FROM
+  ( SELECT
+    CASE WHEN a > b THEN b ELSE a END AS xmin0
+  , CASE WHEN a > b THEN a ELSE b END AS xmax0
+  ) phase1
+  , LATERAL ( SELECT
+    CASE WHEN xmax0 < 0 THEN -xmax0 ELSE xmin0 END AS xmin
+  , CASE WHEN xmax0 < 0 THEN -xmin0 ELSE xmax0 END AS xmax
+  ) phase2
+  ;
+$$;
+
+
+/** min cos(x) : a <= x <= b ; a,b in degrees
+*/
+CREATE OR REPLACE FUNCTION
+"internal:mincos_deg" (IN a Float8, IN b Float8, OUT mincos Float8)
+STRICT IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  SELECT - "internal:maxcos_deg" (a + 180, b + 180);
+$$;
+
+
+/** max sin(x) : a <= x <= b ; a,b in degrees
+*/
+CREATE OR REPLACE FUNCTION
+"internal:maxsin_deg" (IN a Float8, IN b Float8, OUT mincos Float8)
+STRICT IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  SELECT "internal:maxcos_deg" (a - 90, b - 90);
+$$;
+
+
+/** min sin(x) : a <= x <= b ; a,b in degrees
+*/
+CREATE OR REPLACE FUNCTION
+"internal:minsin_deg" (IN a Float8, IN b Float8, OUT mincos Float8)
+STRICT IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  SELECT - "internal:maxcos_deg" (a + 90, b + 90);
+$$;
+
+
+CREATE OR REPLACE FUNCTION
+  earth_box_from_llrange
+  ( IN   "lat1"  Float8
+  , IN   "lat2"  Float8
+  , IN   "lon1"  Float8
+  , IN   "lon2"  Float8
+  , OUT  "box"   Cube
+  )
+LANGUAGE SQL
+IMMUTABLE STRICT
+PARALLEL SAFE
+AS $$
+  SELECT
+    cube(
+      ARRAY[earth() * min_x, earth() * min_y, earth() * min_z]
+    , ARRAY[earth() * max_x, earth() * max_y, earth() * max_z]
+    )
+  FROM
+  ( SELECT
+      min(cos_ra * cos_dec) AS min_x
+    , max(cos_ra * cos_dec) AS max_x
+    FROM
+      ( SELECT "internal:mincos_deg"(lon1, lon2) UNION ALL
+        SELECT "internal:maxcos_deg"(lon1, lon2)
+      ) AS temp1(cos_ra)
+    , ( SELECT "internal:mincos_deg"(lat1, lat2) UNION ALL
+        SELECT "internal:maxcos_deg"(lat1, lat2)
+      ) AS temp2(cos_dec)
+  ) temp10
+  , ( SELECT
+      min(sin_ra * cos_dec) AS min_y
+    , max(sin_ra * cos_dec) AS max_y
+    FROM
+      ( SELECT "internal:minsin_deg"(lon1, lon2) UNION ALL
+        SELECT "internal:maxsin_deg"(lon1, lon2)
+      ) AS temp3(sin_ra)
+    , ( SELECT "internal:mincos_deg"(lat1, lat2) UNION ALL
+        SELECT "internal:maxcos_deg"(lat1, lat2)
+      ) AS temp4(cos_dec)
+  ) temp20
+  , ( SELECT
+      min(sin_dec) AS min_z
+    , max(sin_dec) AS max_z
+    FROM
+      ( SELECT "internal:minsin_deg"(lat1, lat2) UNION ALL
+        SELECT "internal:maxsin_deg"(lat1, lat2)
+      ) AS temp5(sin_dec)
+  ) temp30
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  boxSearch
+  ( IN   coord   Earth
+  , IN   "ra1"   Float8
+  , IN   "ra2"   Float8
+  , IN   "dec1"  Float8
+  , IN   "dec2"  Float8
+  , OUT  isIn    Boolean
+  )
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT
+    coord IS NOT NULL
+    AND coord <@ earth_box_from_llrange(dec1, dec2, ra1, ra2)
+    AND 360.0*c_ceil(((CASE WHEN ra1 > ra2 THEN ra2 ELSE ra1 END) - longitude(coord)) / 360.0) <= (CASE WHEN ra1 > ra2 THEN ra1 ELSE ra2 END) - longitude(coord)
+  ;
+$$;
+
+
+CREATE TYPE Coaddwcs AS
+( naxis1      smallint
+, naxis2      smallint
+, crpix1      smallint /* may have to be float8 */
+, crpix2      smallint /* may have to be float8 */
+, crval1      float8
+, crval2      float8
+);
+
+
+CREATE OR REPLACE FUNCTION
+  sky_to_pixel
+  ( IN   wcs   Coaddwcs
+  , IN   ra    Float8
+  , IN   "dec" Float8
+  , OUT  x     Float8
+  , OUT  y     Float8
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+SELECT
+  -- pixel = offset + magnification * CD^{-1} [in radians] * (x_e1 x_e2)^T
+  c_multiply(magnification,
+    c_multiply('-1.2277667038517632e+06'::float8, x_e1)
+  ) + '17999'::float8
+, c_multiply(magnification,
+    c_multiply('1.2277667038517632e+06'::float8, x_e2)
+  ) + '17999'::float8
+FROM
+  ( SELECT
+      c_multiply(x1, e11) + c_multiply(x2, e21)                        AS x_e1
+    , c_multiply(x1, e12) + c_multiply(x2, e22) + c_multiply(x3, e32)  AS x_e2
+    , c_divide(1.0, (c_multiply(x1, e10) + c_multiply(x2, e20) + c_multiply(x3, e30)))
+                                                                       AS magnification
+    FROM
+      ( SELECT
+          c_multiply(cos_ra, cos_dec)                              AS x1
+        , c_multiply(sin_ra, cos_dec)                              AS x2
+        , sin_dec                                                  AS x3
+        , c_multiply(cos_ra0, cos_dec0)                            AS e10
+        , c_multiply(sin_ra0, cos_dec0)                            AS e20
+        , sin_dec0                                                 AS e30
+        , negate_when_polar * (-1) * sin_ra0                       AS e11
+        , negate_when_polar * cos_ra0                              AS e21
+        , negate_when_polar * (-1) * c_multiply(cos_ra0, sin_dec0) AS e12
+        , negate_when_polar * (-1) * c_multiply(sin_ra0, sin_dec0) AS e22
+        , negate_when_polar * cos_dec0                             AS e32
+        FROM
+          ( SELECT
+              -- The angles in degrees must be re-measured in radians before put into cos/sin
+              c_cos(c_multiply(sky_to_pixel.ra , '1.7453292519943295e-02'::float8))  AS cos_ra
+            , c_sin(c_multiply(sky_to_pixel.ra , '1.7453292519943295e-02'::float8))  AS sin_ra
+            , c_cos(c_multiply(sky_to_pixel.dec, '1.7453292519943295e-02'::float8))  AS cos_dec
+            , c_sin(c_multiply(sky_to_pixel.dec, '1.7453292519943295e-02'::float8))  AS sin_dec
+            , c_cos(c_multiply((wcs).crval1    , '1.7453292519943295e-02'::float8))  AS cos_ra0
+            , c_sin(c_multiply((wcs).crval1    , '1.7453292519943295e-02'::float8))  AS sin_ra0
+            , c_cos(c_multiply((wcs).crval2    , '1.7453292519943295e-02'::float8))  AS cos_dec0
+            , c_sin(c_multiply((wcs).crval2    , '1.7453292519943295e-02'::float8))  AS sin_dec0
+            , CASE WHEN (wcs).crval2 = CAST('90.0' AS Double precision)
+                  THEN CAST('-1.0' AS Double precision)
+                  ELSE CAST('1.0' AS Double precision)
+              END                                                                    AS negate_when_polar
+          ) phase1
+      ) phase2
+  ) phase3
+;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  patch_contains
+  ( IN   area  Cube
+  , IN   wcs   Coaddwcs
+  , IN   ra    Float8
+  , IN   "dec" Float8
+  , OUT  isIn  Boolean
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+SELECT
+  area @> ll_to_earth("dec", ra)
+  AND
+  ((sky_to_pixel(wcs, ra, "dec")).x BETWEEN (17999.5::Float8 - (wcs).crpix1) AND (17999.5::Float8 + ((wcs).naxis1 - (wcs).crpix1)))
+  AND
+  ((sky_to_pixel(wcs, ra, "dec")).y BETWEEN (17999.5::Float8 - (wcs).crpix2) AND (17999.5::Float8 + ((wcs).naxis2 - (wcs).crpix2)))
+;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  "_forced:export_flux"
+  ( IN   flux_stored    Float4
+  , OUT  flux_cgs       Float4
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  /* 5.754e-31 = 10^( -2/5 * (48.6 + 27.0) ) */
+  SELECT
+    c_multiplyf(5.7543993733715904e-31::Float4, flux_stored)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  "_forced:export_fluxerr"
+  ( IN   fluxerr_stored    Float4
+  , OUT  fluxerr_cgs       Float4
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  /* 5.754e-31 = 10^( -2/5 * (48.6 + 27.0) ) */
+  SELECT
+    c_multiplyf(5.7543993733715904e-31::Float4, fluxerr_stored)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  "_forced:export_mag"
+  ( IN   flux_stored    Float4
+  , OUT  mag_cgs        Float4
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  SELECT
+    27.0::Float4 - (2.5::Float4) * public.c_log10f(flux_stored)
+  ;
+$$;
+
+CREATE OR REPLACE FUNCTION
+  "_forced:export_magerr"
+  ( IN   flux_stored        Float4
+  , IN   fluxerr_stored     Float4
+  , OUT  magerr_cgs         Float4
+  )
+IMMUTABLE
+PARALLEL SAFE
+LANGUAGE SQL
+AS $$
+  SELECT
+    CASE
+    WHEN flux_stored > 0::Float4 THEN
+      public.c_multiplyf(1.0857362047581294::Float4, public.c_dividef(fluxerr_stored, flux_stored))
+    WHEN flux_stored IS NULL OR fluxerr_stored IS NULL THEN
+      NULL
+    ELSE
+      'NaN'::Float4
+    END
+  ;
+$$;

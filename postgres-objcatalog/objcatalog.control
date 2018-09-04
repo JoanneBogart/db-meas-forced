@@ -1,0 +1,5 @@
+comment = 'Functions for object catalogs'
+default_version = '1.0'
+module_pathname = '$libdir/objcatalog'
+relocatable = false
+requires = 'cube, earthdistance, cmath'
