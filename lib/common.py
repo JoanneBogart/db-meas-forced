@@ -39,7 +39,8 @@ def get_image_path(rerunDir, tract, patch, filter):
             config.withSkymapWcs, "skymap_wcs-{tract}.fits".format(**locals())
         )
     else:
-        return "{rerunDir}/deepCoadd/{filter}/{tract}/{x},{y}/calexp-{filter}-{tract}-{x},{y}.fits".format(**locals())
+        #return "{rerunDir}/deepCoadd/{filter}/{tract}/{x},{y}/calexp-{filter}-{tract}-{x},{y}.fits".format(**locals())
+        return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/calexp-{filter}-{tract}-{x},{y}.fits".format(**locals())
 
 
 

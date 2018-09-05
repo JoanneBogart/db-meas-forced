@@ -66,6 +66,9 @@ g_fieldNames = {
         "w06": 16010,
         "w07": 16973,
     },
+    "hsc_test": {
+        "hsc01" : 8523,
+    },
 }
 
 g_aliases = {
@@ -118,10 +121,11 @@ def cmdline_args():
 
 
 def main(db_server, format="sql"):
-    graph = pickle.load(open("tractGraph.pickle"))
+    graph = pickle.load(open("tractGraph.pickle", "rb"))
 
     with Printer.create(format, sys.stdout) as printer:
-        for schema in ["s17a_dud", "s17a_wide"]:
+        #for schema in ["s17a_dud", "s17a_wide"]:
+        for schema in ["hsc_test"]:
             tracts = download_existing_tracts(db_server, schema)
             groups = group_tracts(tracts, graph)
             found_fields = set()
