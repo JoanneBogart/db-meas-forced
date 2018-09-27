@@ -220,7 +220,8 @@ def patch_to_row(tract, patch_xy):
     wcs = tract.getWcs()
     xs, ys, zs = [], [], []
     for x, y in itertools.product([left, right], [bottom, top]):
-        coord = wcs.pixelToSky(x, y).toIcrs()
+        #coord = wcs.pixelToSky(x, y).toIcrs()
+        coord = wcs.pixelToSky(x, y)
         ra  = coord.getRa ().asRadians()
         dec = coord.getDec().asRadians()
         sin_ra  = math.sin(ra )
