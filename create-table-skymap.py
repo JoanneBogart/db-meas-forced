@@ -37,13 +37,19 @@ default_db_server = {
 # radian / arcsec
 earth = 180.0*3600.0 / math.pi
 
-# The following parameters are common to all fits headers.
-s_tract_crpix1 = '18000'
-s_tract_crpix2 = '18000'
-s_tract_cd1_1  = '-4.66666666666667E-05'
+# The following parameters are common to all tracts
+# but different for hsc and lsst
+#s_tract_crpix1 = '18000'     #  hsc value
+#s_tract_crpix2 = '18000'
+s_tract_crpix1 = '16000'      # lsst value
+s_tract_crpix2 = '16000'
+#s_tract_cd1_1  = '-4.66666666666667E-05'    # hsc value
+s_tract_cd1_1  = '-5.13888888888923E-05'     # lsst value
 s_tract_cd1_2  = '0.                   '
 s_tract_cd2_1  = '0.                   '
-s_tract_cd2_2  = '4.66666666666667E-05 '
+#s_tract_cd2_2  = '4.66666666666667E-05 '    # hsc vallue
+s_tract_cd2_2  = '5.13888888888923E-05'      # lsst value
+
 
 tract_crpix1 = int  (s_tract_crpix1)
 tract_crpix2 = int  (s_tract_crpix2)
@@ -76,11 +82,17 @@ def cmdline_args():
         action="append",
         help="DB to connect to. This option must come later than non-optional arguments.",
     )
+    parser.add_argument(
+        "--suffix",
+        default=None,
+        help="Append to usual name 'skymap' as it appears in table and view",
+        dest='suffix')
+        
 
     return parser
 
 
-def main(skyMap_path, db_server):
+def main(skyMap_path, db_server, suffix):
     skyMap = pickle.load(open(skyMap_path, "rb"))
     db = psycopg2.connect(**db_server)
 
@@ -95,13 +107,17 @@ def main(skyMap_path, db_server):
 
         print("tract {} / {}".format(tract.getId(), len(skyMap)-1))
 
-    create_table(db, rows)
+    tablename = 'skymap'
+    if suffix is not None:
+        tablename = 'skymap' + suffix
+        
+    create_table(db, rows, tablename)
     db.commit()
 
 
-def create_table(db, rows):
+def create_table(db, rows, tablename='skymap'):
     """
-    Create table "skymap".
+    Create table and view representing  skymap.
 
     @param db (DB Connection)
     @param rows (list of str)
@@ -110,7 +126,7 @@ def create_table(db, rows):
     with db.cursor() as cursor:
         cursor.execute("""
         CREATE TABLE
-        public."_skymap:base"(
+        public."_""" + tablename + """:base"(
             skymap_id   integer  PRIMARY KEY,
             patch_area  cube     NOT NULL,
             wcs         coaddwcs NOT NULL
@@ -118,17 +134,17 @@ def create_table(db, rows):
         """)
 
         cursor.execute("""
-        INSERT INTO public."_skymap:base" VALUES
+        INSERT INTO public."_""" + tablename + """:base" VALUES
         """ + ",".join(rows)
         )
 
         cursor.execute("""
-        CREATE INDEX ON public."_skymap:base" USING GiST (patch_area);
+        CREATE INDEX ON public."_""" + tablename + """:base" USING GiST (patch_area);
         """)
 
         cursor.execute("""
         CREATE OR REPLACE VIEW
-        public.skymap AS (
+        public.""" + tablename + """ AS (
             SELECT
                 skymap_id,
             --  skymap_id / 10000                 AS tract,
@@ -170,16 +186,16 @@ def create_table(db, rows):
                 'PIXEL'               ::text     AS cunit1a,
                 'PIXEL'               ::text     AS cunit2a
             FROM
-                public."_skymap:base"
+                public."_""".format(**globals()) + tablename + """:base"
         )
-        """.format(**globals())
+        """
         )
 
         for key, value in g_comments.items():
             if key:
-                object = "COLUMN public.skymap.{key}".format(key=key)
+                object = "COLUMN public." + tablename + ".{key}".format(key=key)
             else:
-                object = "VIEW public.skymap"
+                object = "VIEW public." + tablename
 
             cursor.execute("""
                 COMMENT ON {object} IS %(value)s
@@ -188,12 +204,13 @@ def create_table(db, rows):
                 "value": textwrap.dedent(value).strip(),
             })
 
-        cursor.execute("""
-        GRANT SELECT ON TABLE
-            public."_skymap:base", public.skymap
-        TO
-            public
-        """)
+        # Do this one by hand for now
+        #cursor.execute("""
+        #GRANT SELECT ON TABLE
+        #    public."_""" + tablename + """:base", public.""" + tablename +
+        #"""TO
+        #    public
+        #""")
 
 
 def patch_to_row(tract, patch_xy):
