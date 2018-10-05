@@ -14,6 +14,12 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+    Replacements for lsst:
+          17999, 17999.5       -->  15999, 15999.5
+
+          1.2277667038517632E+06   -->  1.1149448986328794E+06
+
 CREATE OR REPLACE FUNCTION
   radec_to_coord
   ( IN   ra      Float8
@@ -370,11 +376,11 @@ AS $$
 SELECT
   -- pixel = offset + magnification * CD^{-1} [in radians] * (x_e1 x_e2)^T
   c_multiply(magnification,
-    c_multiply('-1.2277667038517632e+06'::float8, x_e1)
-  ) + '17999'::float8
+    c_multiply('-1.1149448986328794e+06'::float8, x_e1)
+  ) + '15999'::float8
 , c_multiply(magnification,
-    c_multiply('1.2277667038517632e+06'::float8, x_e2)
-  ) + '17999'::float8
+    c_multiply('1.1149448986328794e+06'::float8, x_e2)
+  ) + '15999'::float8
 FROM
   ( SELECT
       c_multiply(x1, e11) + c_multiply(x2, e21)                        AS x_e1
@@ -430,9 +436,9 @@ AS $$
 SELECT
   area @> ll_to_earth("dec", ra)
   AND
-  ((sky_to_pixel(wcs, ra, "dec")).x BETWEEN (17999.5::Float8 - (wcs).crpix1) AND (17999.5::Float8 + ((wcs).naxis1 - (wcs).crpix1)))
+  ((sky_to_pixel(wcs, ra, "dec")).x BETWEEN (15999.5::Float8 - (wcs).crpix1) AND (15999.5::Float8 + ((wcs).naxis1 - (wcs).crpix1)))
   AND
-  ((sky_to_pixel(wcs, ra, "dec")).y BETWEEN (17999.5::Float8 - (wcs).crpix2) AND (17999.5::Float8 + ((wcs).naxis2 - (wcs).crpix2)))
+  ((sky_to_pixel(wcs, ra, "dec")).y BETWEEN (15999.5::Float8 - (wcs).crpix2) AND (15999.5::Float8 + ((wcs).naxis2 - (wcs).crpix2)))
 ;
 $$;
 
