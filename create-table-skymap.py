@@ -204,13 +204,12 @@ def create_table(db, rows, tablename='skymap'):
                 "value": textwrap.dedent(value).strip(),
             })
 
-        # Do this one by hand for now
-        #cursor.execute("""
-        #GRANT SELECT ON TABLE
-        #    public."_""" + tablename + """:base", public.""" + tablename +
-        #"""TO
-        #    public
-        #""")
+        # Earlier issue was probably missing space before 'TO'
+        cursor.execute("""
+        GRANT SELECT ON TABLE
+            public."_""" + tablename + """:base", public.""" + tablename +
+        """ TO public
+        """)
 
 
 def patch_to_row(tract, patch_xy):
