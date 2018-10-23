@@ -51,18 +51,21 @@ ref_algos_ignored = [
     "base_SdssCentroid_",
     "base_SdssShape_",
     "base_Variance_",
-    "calib_",
+    #"calib_",                                  # doesn't exist for LSST
     "deblend_",
     "ext_convolved_ConvolvedFlux_",
-    "ext_photometryKron_KronFlux_",
+    #"ext_photometryKron_KronFlux_",            # doesn't exist for LSST
     "ext_shapeHSM_HsmPsfMoments_",
     "ext_shapeHSM_HsmShapeRegauss_",
     "ext_shapeHSM_HsmSourceMoments_",
-    "ext_shapeHSM_HsmSourceMomentsRound_",
+    #"ext_shapeHSM_HsmSourceMomentsRound_",     # doesn't exist for LSST
+    "ext_shapeHSM_HsmShapeBj_",                 # added for LSST
+    "ext_shapeHSM_HsmShapeKsb_",                # added for LSST
+    "ext_shapeHSM_HsmShapeLinear_",             # added for LSST
     "footprint",
     "modelfit_CModel_",
     "modelfit_DoubleShapeletPsfApprox_",
-    "subaru_FilterFraction_",
+    #"subaru_FilterFraction_",                 # doesn't exist for LSST
 ]
 
 
@@ -70,7 +73,7 @@ forced_algos = PoppingOrderedDict(
     (_name, _import_algo(_name))
     for _name in (
         "base_CircularApertureFlux",
-        "base_ClassificationExtendedness",
+        #"base_ClassificationExtendedness",  # only in ref for LSST
         "base_GaussianFlux",
         "base_InputCount",
         "base_LocalBackground",
@@ -79,13 +82,13 @@ forced_algos = PoppingOrderedDict(
         "base_SdssCentroid",
         "base_SdssShape",
         "base_Variance",
-        "ext_convolved_ConvolvedFlux",
-        "ext_photometryKron_KronFlux",
+        #  "ext_convolved_ConvolvedFlux",           # in ref only
+        #    "ext_photometryKron_KronFlux",         # not in LSST data
         "modelfit_CModel",
         "modelfit_DoubleShapeletPsfApprox",
-        "undeblended_base_PsfFlux",
-        "undeblended_ext_photometryKron_KronFlux",
-        "undeblended_base_CircularApertureFlux",
+        #"undeblended_base_PsfFlux",                # Not in LSST data
+        #"undeblended_ext_photometryKron_KronFlux", # not in LSST data
+        #"undeblended_base_CircularApertureFlux",   # not in LSST data
     )
 )
 
@@ -96,4 +99,5 @@ forced_algos_ignored = [
     "deblend_nChild",
     "base_TransformedCentroid_",
     "base_TransformedShape_",
+    "modelfit_GeneralShapeletPsfApprox_",       # added for LSST
 ]

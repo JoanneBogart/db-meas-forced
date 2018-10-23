@@ -44,7 +44,7 @@ def get_image_path(rerunDir, tract, patch, filter):
 
 
 
-def get_existing_filters(rerunDir):
+def get_existing_filters(rerunDir, hsc=False):
     """
     Search "rerunDir" and return existing filters in it.
     @param rerunDir
@@ -52,9 +52,14 @@ def get_existing_filters(rerunDir):
     @return
         List of filter names, sorted.
     """
+
     filters = os.listdir("{rerunDir}/deepCoadd-results".format(**locals()))
-    return sorted((f for f in filters if re.match(r'^(?:HSC-.*|NB.*)$', f)),
-        key=lambda f: filterOrder[f])
+    if hsc:
+        return sorted((f for f in filters if re.match(r'^(?:HSC-.*|NB.*)$', f)),
+                      key=lambda f: filterOrder[f])
+    else:
+        return sorted((f for f in filters if re.match(r'^[a-z]$', f)))
+
 
 
 def get_existing_tracts(rerunDir):
@@ -69,7 +74,7 @@ def get_existing_tracts(rerunDir):
 
     return sorted(set(
         int(tract) for tract in tracts if re.match(r'^[0-9]+$', tract)
-    ))
+    ) )
 
 def patch_to_number(patchStr):
     """
@@ -86,7 +91,11 @@ def path_decompose(path):
         (tract, patch, filter) or (trct, patch)
     """
     basename = os.path.basename(path)
-    m = re.match(r'^(?:calexp|forced_src|meas|ran|forced_src_undeblendedConvolved)-(HSC-\w+|NB-?\w+)-([0-9]+)-([0-9]+),([0-9]+)\.fits(?:\.gz)?$', basename)
+    #print("In path_decompose called with path=", path)
+    #print("Computed basename=", basename)
+    # For LSST forced source filepaths have only 'forced', not 'forced_src'
+    #m = re.match(r'^(?:calexp|forced_src|meas|ran|forced_src_undeblendedConvolved)-(HSC-\w+|NB-?\w+)-([0-9]+)-([0-9]+),([0-9]+)\.fits(?:\.gz)?$', basename)
+    m = re.match(r'^(?:calexp|forced|meas|ran|forced_src_undeblendedConvolved)-([a-z])-([0-9]+)-([0-9]+),([0-9]+)\.fits(?:\.gz)?$', basename)
     if m:
         filter, tract, x, y = m.groups()
         patch = int(x)*100 + int(y)
@@ -116,18 +125,24 @@ def new_db_connection():
     else:
         return libdb.DBConnectionDebug(psycopg2.connect(**config.dbServer))
 
-
+# Not needed for LSST DC2 data.  Short names are always used.
 filterToShortName = collections.OrderedDict([
-    ("HSC-G" , "g"    ),
-    ("HSC-R" , "r"    ),
-    ("HSC-I" , "i"    ),
-    ("HSC-Z" , "z"    ),
-    ("HSC-Y" , "y"    ),
-    ("NB0387", "n387" ),
-    ("NB0515", "n515" ),
-    ("NB0816", "n816" ),
-    ("NB0921", "n921" ),
-    ("NB1010", "n1010"),
+#    ("HSC-G" , "g"    ),
+#    ("HSC-R" , "r"    ),
+#    ("HSC-I" , "i"    ),
+#    ("HSC-Z" , "z"    ),
+#    ("HSC-Y" , "y"    ),
+#    ("NB0387", "n387" ),
+#    ("NB0515", "n515" ),
+#    ("NB0816", "n816" ),
+#    ("NB0921", "n921" ),
+#    ("NB1010", "n1010"),
+    ("g", "g"),
+    ("r", "r"),
+    ("i", "i"),
+    ("z", "z"),
+    ("y", "y"),
+    ("u", "u"),
 ])
 
 filterOrder = {

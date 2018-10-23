@@ -80,8 +80,22 @@ class DBTable(object):
             {"ra": numpy.array, "dec": numpy.array}.
             The angles are in degrees.
         """
+        #if 'position' in self.name:
+        #    print("# of algorithms: ", len(self.algos.values()))
         for algo in self.algos.values():
+            #if 'position' in self.name:
+            #    print("Calling transform for alg ", str(algo))
+            #if  'ref_coord' in str(type(algo)):
+            #    print("Calling transform for ref_coord")
+            #    fields = algo.sourceTable.fields
+            #    print('about to transform ref_coord. Original stuff:')
+            #    for k in fields:  print(k, fields[k])
             algo.transform(rerunDir, tract, patch, filter, coord)
+            #if  'ref_coord' in str(type(algo)):
+            #    print("Done calling transform for ref_coord")
+            #    fields = algo.sourceTable.fields
+            #    print('Done transforming ref_coord. New stuff:')
+            #    for k in fields:  print(k, fields[k])
 
     def create(self, cursor, schemaName):
         """
@@ -90,13 +104,15 @@ class DBTable(object):
         in addition to the fields in the Algo's.
         @param cursor
             DB connection's cursor object
+            If None don't actually write to db; just to stdout
         @param schemaName
             Name of the schema in which to locate the master table
         """
         members = ['object_id Bigint']
 
         for filter in self.filters:
-            filt = common.filterToShortName[filter] + "_" if filter else ""
+            #filt = common.filterToShortName[filter] + "_" if filter else ""
+            filt = filter + "_" if filter else ""
             for algo in self.algos.values():
                 for name, type in algo.get_backend_fields(filt):
                     members.append("{name}  {type}".format(**locals()))
@@ -106,13 +122,17 @@ class DBTable(object):
 
         tableSpace = config.get_table_space()
 
-        cursor.execute("""
+        create_string = """
         CREATE TABLE "{schemaName}"."{self.name}" (
             {members}
         )
         {tableSpace}
         """.format(**locals())
-        )
+
+        if cursor is not None:
+            cursor.execute(create_string)
+        else:
+            print(create_string)
 
     def create_index(self, cursor, schemaName):
         """
