@@ -48,6 +48,8 @@ class Algo_ref_coord(algobase.Algo):
         fields["extinction_bv"] = sourcetable.Field(
             "extinction_bv", "Scalar", "", extinction_bv, "E(B-V)"
         )
+        #print('In ref_coord __init__ fields keys are: ')
+        #for k in fields: print(k)
 
         self.sourceTable = sourcetable.SourceTable(fields, sourceTable.slots, sourceTable.fitsheader)
 
@@ -114,15 +116,15 @@ class Algo_ref_coord(algobase.Algo):
             ),
         ]
 
-        for filter in self.filters:
-            filt = common.filterToShortName[filter]
-            members.append(
-                ("a_" + filt,
-                    "{}::Real * extinction_bv".format(common.absorptionCoeff[filter]),
-                    "mag",
-                    "absorption for {}".format(filter),
-                ),
-            )
+        #for filter in self.filters:
+        #    filt = common.filterToShortName[filter]
+        #    members.append(
+        #        ("a_" + filt,
+        #            "{}::Real * extinction_bv".format(common.absorptionCoeff[filter]),
+        #            "mag",
+        #            "absorption for {}".format(filter),
+        #        ),
+        #    )
 
         return members
 
