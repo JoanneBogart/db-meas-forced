@@ -17,6 +17,7 @@
 
 import numpy
 import psycopg2
+import sys
 
 import lib.fits
 import lib.misc
@@ -37,6 +38,7 @@ import os
 import re
 import sys
 import textwrap
+
 
 
 def main():
@@ -81,12 +83,19 @@ def main():
     if args.create_index:
         create_index_on_mastertable(args.rerunDir, args.schemaName, filters)
     else:
-        create_mastertable_if_not_exists(args.rerunDir, args.schemaName, args.table_name, filters, args.dryrun)
+        print("Invoking create_mastertable_if_not_exists")
+        create_mastertable_if_not_exists(args.rerunDir, args.schemaName, 
+                                         args.table_name, filters, args.dryrun)
+        sys.stdout.flush()
+        sys.stderr.flush()
         if not args.no_insert:
-            insert_into_mastertable(args.rerunDir, args.schemaName, args.table_name, filters, args.dryrun)
+            print("invoking insert_into_mastertable")
+            insert_into_mastertable(args.rerunDir, args.schemaName, 
+                                    args.table_name, filters, args.dryrun)
 
 
-def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, filters, dryrun):
+def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
+                                     filters, dryrun):
     """
     Create the master table if it does not exist.
     @param rerunDir
@@ -144,16 +153,13 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     @param filters
         List of filter names
     """
+
     tract, patch, filter = get_an_exisiting_catalog_id(rerunDir)
     catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
     universals, object_id, coord = get_ref_schema_from_file(refPath)
     multibands = get_catalog_schema_from_file(catPath, object_id)
-    for t in multibands:
-        if 'part4' in t:
-            print('Db table name is ', t)
-            print('algos are ', str(multibands[t]))
 
     for table in itertools.chain(universals.values(), multibands.values()):
         table.set_filters(filters)

@@ -15,6 +15,7 @@
 
 import os
 
+#NDEBUG = True
 NDEBUG = False
 MULTICORE = True
 
