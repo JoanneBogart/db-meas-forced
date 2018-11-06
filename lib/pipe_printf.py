@@ -31,8 +31,8 @@ def open(format, *columns):
         except BaseException as e:
             with contextlib.suppress(BaseException):
                 sys.excepthook(*sys.exc_info())
-                sys.stdout.flush()
-                sys.stderr.flush()
+                #sys.stdout.flush()
+                #sys.stderr.flush()
 
         os._exit(1)
     else:

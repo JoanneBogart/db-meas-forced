@@ -48,12 +48,12 @@ meas_algos = PoppingOrderedDict(
         "deblend",
         "detect",
         "ext_convolved_ConvolvedFlux",
-        "ext_photometryKron_KronFlux",
+        #"ext_photometryKron_KronFlux",
         "ext_shapeHSM",
         "merge",
         "meas_modelfit_CModel",
         "modelfit_DoubleShapeletPsfApprox",
-        "subaru_FilterFraction",
+        #"subaru_FilterFraction",
     )
 )
 

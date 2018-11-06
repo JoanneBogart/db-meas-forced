@@ -82,7 +82,7 @@ def main():
     if args.create_index:
         create_index_on_mastertable(args.rerunDir, args.schemaName, filters)
     else:
-        create_mastertable_if_not_exists(args.rerunDir, args.schemaName, args.table_name, filters)
+        create_mastertable_if_not_exists(args.rerunDir, args.schemaName, args.table_name, filters, args.dryrun)
 
         sys.stdout.flush()
         sys.stderr.flush()
@@ -562,7 +562,7 @@ def get_catalog_schema_from_file(path, tablePosition):
          "base_SdssCentroid",
          "base_GaussianFlux",
          "base_PsfFlux",
-         "ext_photometryKron_KronFlux",
+         #"ext_photometryKron_KronFlux",
          "base_SdssShape",
          "ext_shapeHSM",
          "modelfit_DoubleShapeletPsfApprox",
@@ -577,6 +577,8 @@ def get_catalog_schema_from_file(path, tablePosition):
     ])
 
     if algos:
+        for k in algos:
+            print('Unused algo ', str(k))
         raise RuntimeError("Algorithms remain unused: ".format(algos))
 
     return tablePosition, dbtables

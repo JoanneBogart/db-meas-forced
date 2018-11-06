@@ -24,7 +24,9 @@ class Algo_ext_shapeHSM(algobase.Algo):
             'ra' : 'ext_shapeHSM_{}_ra'.format(infix),
             'dec': 'ext_shapeHSM_{}_dec'.format(infix),
         }
-        for infix in ["HsmPsfMoments", "HsmSourceMoments", "HsmSourceMomentsRound", ]
+        for infix in ["HsmPsfMoments", "HsmSourceMoments", ]
+        # DC2 data has no fields ext_shapeHSM_HsmSourceMomentsRound*
+        #for infix in ["HsmPsfMoments", "HsmSourceMoments", "HsmSourceMomentsRound", ]
     ]
 
     shapes = [
@@ -38,15 +40,17 @@ class Algo_ext_shapeHSM(algobase.Algo):
             'ra' : 'ext_shapeHSM_{}_ra'.format(infix),
             'dec': 'ext_shapeHSM_{}_dec'.format(infix),
         }
-        for infix in ["HsmPsfMoments", "HsmSourceMoments", "HsmSourceMomentsRound", ]
+        for infix in ["HsmPsfMoments", "HsmSourceMoments", ]
+        # DC2 data has no fields ext_shapeHSM_HsmSourceMomentsRound*
+        #for infix in ["HsmPsfMoments", "HsmSourceMoments", "HsmSourceMomentsRound", ]
     ]
 
-    fluxes = [
-        {
-            'flux': "ext_shapeHSM_HsmSourceMomentsRound_Flux",
-            'mag' : "ext_shapeHSM_HsmSourceMomentsRound_mag",
-        }
-    ]
+    #fluxes = [
+    #    {
+    #        #'flux': "ext_shapeHSM_HsmSourceMomentsRound_Flux",
+    #        #'mag' : "ext_shapeHSM_HsmSourceMomentsRound_mag",
+    #    }
+    #]
 
     ellipticities = [
         {
