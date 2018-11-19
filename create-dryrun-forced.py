@@ -36,7 +36,6 @@ import io
 import itertools
 import os
 import re
-import sys
 import textwrap
 
 
@@ -154,8 +153,9 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
         List of filter names
     """
 
-    tract, patch, filter = get_an_exisiting_catalog_id(rerunDir)
-    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False)
+    tract, patch, filter = get_an_existing_catalog_id(rerunDir, schemaName)
+    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
+                               schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
     universals, object_id, coord = get_ref_schema_from_file(refPath)
@@ -224,9 +224,13 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     listMultibands.append(multibands.pop_many([
         '_forced:part3',
     ]))
-    #listMultibands.append(multibands.pop_many([
-    #    '_forced:part4',
-    #]))
+    (major, minor, sim_type) = extract_schema_fields(schemaName)
+    if major == None or (str(major) == '1' and str(minor) == '1'):
+        pass
+    else:
+        listMultibands.append(multibands.pop_many([
+            '_forced:part4',
+        ]))
 
     for iPart, (universals, multibands) in enumerate(
         itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
@@ -325,6 +329,8 @@ def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
         for patch in get_existing_patches(rerunDir, tract):
             insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun)
 
+            #  temp for debugging:  stop after first patch
+            # if dryrun:  return
 
 def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun):
     """
@@ -347,7 +353,8 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
     """
     catPaths = {}
     for filter in filters:
-        catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False)
+        catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
+                                   schemaName=schemaName)
         if lib.common.path_exists(catPath):
             catPaths[filter] = catPath
 
@@ -453,8 +460,9 @@ def create_index_on_mastertable(rerunDir, schemaName, filters):
     @param filters
         List of filter names
     """
-    tract, patch, filter = get_an_exisiting_catalog_id(rerunDir)
-    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False)
+    tract, patch, filter = get_an_existing_catalog_id(rerunDir, schemaName)
+    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
+                               schemaName=schemaName)
     refPath = get_ref_path    (rerunDir, tract, patch)
 
     universals, object_id, coord = get_ref_schema_from_file(refPath)
@@ -481,8 +489,9 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
     @param filters
         List of filter names
     """
-    tract, patch, filter = get_an_exisiting_catalog_id(rerunDir)
-    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False)
+    tract, patch, filter = get_an_existing_catalog_id(rerunDir, schemaName)
+    catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
+                               schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
     universals, object_id, coord = get_ref_schema_from_file(refPath)
@@ -547,7 +556,10 @@ def get_ref_schema_from_file(path):
     ], dbtable_class=DBTable_Position)
 
     if algos:
-        raise RuntimeError("Algorithms remain unused: ".format(algos))
+        print("remaining algos:")
+        print(type(algos))
+        for k in algos: print(str(k))
+        raise RuntimeError("Algorithms remain unused; see above ")
 
     return dbtables, object_id, coord
 
@@ -717,7 +729,7 @@ def get_catalog_schema_from_file(path, object_id):
         "base_InputCount",
         "base_Variance",
         "base_LocalBackground",
-        #"base_ClassificationExtendedness",
+        "base_ClassificationExtendedness",    # not in lsst 1.1 data
         "modelfit_CModel",
     ])
 
@@ -725,24 +737,29 @@ def get_catalog_schema_from_file(path, object_id):
         "base_SdssCentroid",
         "base_GaussianFlux",
         "base_PsfFlux",
-        # "ext_photometryKron_KronFlux",   # not in lsst data
+        "ext_photometryKron_KronFlux",   # not in lsst 1.1 data
         "base_SdssShape",
-        "modelfit_DoubleShapeletPsfApprox",
-        #"undeblended_base_PsfFlux",
-        #  "undeblended_ext_photometryKron_KronFlux",  # not in lsst data
+        "modelfit_DoubleShapeletPsfApprox",   # not in lsst 1.1 data
+        "undeblended_base_PsfFlux",
+        "undeblended_ext_photometryKron_KronFlux",  # not in lsst 1.1 data
     ])
 
     add("_forced:part3", [
         "base_CircularApertureFlux",
-        #"undeblended_base_CircularApertureFlux",
+        "undeblended_base_CircularApertureFlux",   # not in lsst 1.1 data
     ])
 
-    #add("_forced:part4", [
-    #    "ext_convolved_ConvolvedFlux",
-    #])
+    # Put this back in for Run1.2
+    # NOTE:  This code will no longer work for 1.1
+    add("_forced:part4", [
+        "ext_convolved_ConvolvedFlux",
+    ])
 
     if algos:
-        raise RuntimeError("Algorithms remain unused: ".format(algos))
+        print("remaining algos:")
+        print(type(algos))
+        for k in algos: print(str(k))
+        raise RuntimeError("Algorithms remain unused. See above. ")
 
     return dbtables
 
@@ -777,7 +794,7 @@ def get_ref_path(rerunDir, tract, patch):
         x, y = patch // 100, patch % 100
     return "{rerunDir}/deepCoadd-results/merged/{tract}/{x},{y}/ref-{tract}-{x},{y}.fits".format(**locals())
 
-def get_catalog_path(rerunDir, tract, patch, filter, hsc=True):
+def get_catalog_path(rerunDir, tract, patch, filter, hsc=True, schemaName=None):
     """
     Get the path to the "forced_src-*.fits" catalog identified by the arguments.
     The file may be compressed, but the path is virtualized so it always ends with '.fits'.
@@ -789,19 +806,24 @@ def get_catalog_path(rerunDir, tract, patch, filter, hsc=True):
     if hsc is True:
         return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/forced_src-{filter}-{tract}-{x},{y}.fits".format(**locals())
     else:
-        return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/forced-{filter}-{tract}-{x},{y}.fits".format(**locals())
-
-def get_an_exisiting_catalog_id(rerunDir):
+        (major, minor, sim_type) = extract_schema_fields(schemaName)
+        if major == None or (str(major) == '1' and str(minor) == '1'):
+            return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/forced-{filter}-{tract}-{x},{y}.fits".format(**locals())
+        else:
+            return "{rerunDir}/deepCoadd_results/{filter}_t{tract}_p{x},{y}/forced-{filter}-{tract}-{x},{y}.fits".format(**locals())
+def get_an_existing_catalog_id(rerunDir, schemaName):
     """
     Get any one triple (tract, patch, filter) for which catalog files exist
     """
-    pattern = get_catalog_path(rerunDir, "*", "*", "*", False)
+    pattern = get_catalog_path(rerunDir, "*", "*", "*", False, schemaName)
 
     #print("pattern is ", str(pattern))
     for catPath in itertools.chain(glob.iglob(pattern), glob.iglob(pattern + ".gz")):
-        print('catPath is: ', catPath)
+        #print('catPath is: ', catPath)
         tract, patch, filter = lib.common.path_decompose(catPath)
+        #print('tract={tract}, patch={patch}, filter={filter}'.format(**locals()))
         refPath = get_ref_path(rerunDir, tract, patch)
+        #print('refPath is {refPath}'.format(**locals()))
         if lib.common.path_exists(refPath):
             return tract, patch, filter
 
@@ -890,6 +912,22 @@ def is_patch_already_inserted(cursor, schemaName, tract, patch, filters):
 
     return False
 
+def extract_schema_fields(schemaName):
+    """
+    Expecting input of the form alphastringDDS   where D is major version 
+    (single digit), D is minor version (one or more digits) and 
+    S is simulator type (one of 'p' or 'i').   Return a triple
+    (major-version, minor-version, sim-type)
+    @param schemaName
+    """
+    if schemaName is None: 
+        return(None, None, None)
 
+    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)\Z'
+    result = re.match(pat, schemaName)
+    if result:
+        return(result.group(0), result.group(1), result.group(2))
+    else:
+        return(None, None, None)
 if __name__ == "__main__":
     main()

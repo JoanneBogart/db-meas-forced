@@ -51,14 +51,14 @@ ref_algos_ignored = [
     "base_SdssCentroid_",
     "base_SdssShape_",
     "base_Variance_",
-    #"calib_",                                  # doesn't exist for LSST
+    "calib_",                  # not in for LSST run1.1; is in run1.2
     "deblend_",
     "ext_convolved_ConvolvedFlux_",
-    #"ext_photometryKron_KronFlux_",            # doesn't exist for LSST
+    "ext_photometryKron_KronFlux_", # not in for LSST run1.1; is in 1.2
     "ext_shapeHSM_HsmPsfMoments_",
     "ext_shapeHSM_HsmShapeRegauss_",
     "ext_shapeHSM_HsmSourceMoments_",
-    #"ext_shapeHSM_HsmSourceMomentsRound_",     # doesn't exist for LSST
+    "ext_shapeHSM_HsmSourceMomentsRound_", # not in for LSST run1.1; is in 1.2
     "ext_shapeHSM_HsmShapeBj_",                 # added for LSST
     "ext_shapeHSM_HsmShapeKsb_",                # added for LSST
     "ext_shapeHSM_HsmShapeLinear_",             # added for LSST
@@ -73,7 +73,7 @@ forced_algos = PoppingOrderedDict(
     (_name, _import_algo(_name))
     for _name in (
         "base_CircularApertureFlux",
-        #"base_ClassificationExtendedness",  # only in ref for LSST
+        "base_ClassificationExtendedness",  # only in ref for LSST run1.1
         "base_GaussianFlux",
         "base_InputCount",
         "base_LocalBackground",
@@ -82,22 +82,24 @@ forced_algos = PoppingOrderedDict(
         "base_SdssCentroid",
         "base_SdssShape",
         "base_Variance",
-        #  "ext_convolved_ConvolvedFlux",           # in ref only
-        #    "ext_photometryKron_KronFlux",         # not in LSST data
+        "ext_convolved_ConvolvedFlux", # in ref only for 1.1; in forced for 1.2
+        "ext_photometryKron_KronFlux", # not in LSST 1.1; is in 1.2
         "modelfit_CModel",
         "modelfit_DoubleShapeletPsfApprox",
-        #"undeblended_base_PsfFlux",                # Not in LSST data
-        #"undeblended_ext_photometryKron_KronFlux", # not in LSST data
-        #"undeblended_base_CircularApertureFlux",   # not in LSST data
+        "undeblended_base_PsfFlux",                # Not in LSST Run1.1; in 1.2
+        "undeblended_ext_photometryKron_KronFlux", # not in LSST 1.1; in 1.2
+        "undeblended_base_CircularApertureFlux",   # not in LSST 1.1; in 1.2
     )
 )
 
-
+# There is an algorithm for undeblended_ext_convolve_ConvolvedFlux, so it's
+# not clear we should be ignoring it.
 forced_algos_ignored = [
     "coord",
     "parent",
     "deblend_nChild",
     "base_TransformedCentroid_",
     "base_TransformedShape_",
+    "undeblended_ext_convolved_ConvolvedFlux_", # add for LSST 1.2
     "modelfit_GeneralShapeletPsfApprox_",       # added for LSST
 ]
