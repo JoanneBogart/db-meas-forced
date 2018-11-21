@@ -48,7 +48,7 @@ meas_algos = PoppingOrderedDict(
         "deblend",
         "detect",
         "ext_convolved_ConvolvedFlux",
-        #"ext_photometryKron_KronFlux",
+        "ext_photometryKron_KronFlux",    # put back in for run1.2p ?
         "ext_shapeHSM",
         "merge",
         "meas_modelfit_CModel",

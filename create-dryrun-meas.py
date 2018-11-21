@@ -68,8 +68,13 @@ def main():
     parser.add_argument('--no-insert', dest='no_insert', action='store_true',
                         help="Just create tables and views; no inserts", 
                         default=False)
+    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', help="If supplied, ingest data for specified tracts only. Otherwise ingest all")
 
     args = parser.parse_args()
+
+    if args.tracts is not None:
+        print("Processing the following tracts:")
+        for t in args.tracts: print(t)
 
     if args.db_server:
         lib.config.dbServer.update(keyvalue.split('=', 1) for keyvalue in itertools.chain.from_iterable(args.db_server))
@@ -86,9 +91,14 @@ def main():
 
         sys.stdout.flush()
         sys.stderr.flush()
+        if args.tracts: 
+            tracts = args.tracts
+        else:
+            tracts = None
         if not args.no_insert:
             insert_into_mastertable(args.rerunDir, args.schemaName, 
-                                    args.table_name, filters, args.dryrun)
+                                    args.table_name, filters, args.dryrun,
+                                    tracts)
 
 
 def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
@@ -126,12 +136,14 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             db.close()
             drop_index_from_mastertable(rerunDir, schemaName, filters)
     else:
-        print("Would execute: ")
-        print(create_schema_string)
-        cursor = None
-        create_mastertable(cursor, rerunDir, schemaName, masterTableName,
-                           filters)
-
+        if bNeedCreating:
+            print("Would execute: ")
+            print(create_schema_string)
+            cursor = None
+            create_mastertable(cursor, rerunDir, schemaName, masterTableName,
+                               filters)
+        else:
+            print("Master table already exists")
 
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     """
@@ -295,7 +307,7 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
             print(' to be bound with dict: ',arg_dict)
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
-                            dryrun):
+                            dryrun, tracts):
     """
     Insert data into the master table.
     The data will actually flow not into the master table but into its children.
@@ -308,8 +320,19 @@ def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
     @param filters
         List of filter names
     @param dryrun
+    @param tracts
+        If present (not None) insert data only from specified tracts. Else
+        insert data from all tracts
     """
-    for tract in lib.common.get_existing_tracts(rerunDir):
+    all_tracts = lib.common.get_existing_tracts(rerunDir)
+    our_tracts = []
+    if tracts == None:
+        our_tracts = all_tracts
+    else:
+        for t in tracts:
+            if t in all_tracts: our_tracts.append(t)
+
+    for tract in our_tracts:
         for patch in get_existing_patches(rerunDir, tract):
             insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun)
 
@@ -562,7 +585,7 @@ def get_catalog_schema_from_file(path, tablePosition):
          "base_SdssCentroid",
          "base_GaussianFlux",
          "base_PsfFlux",
-         #"ext_photometryKron_KronFlux",
+         "ext_photometryKron_KronFlux",   #  put this back for 1.2p
          "base_SdssShape",
          "ext_shapeHSM",
          "modelfit_DoubleShapeletPsfApprox",
@@ -579,7 +602,7 @@ def get_catalog_schema_from_file(path, tablePosition):
     if algos:
         for k in algos:
             print('Unused algo ', str(k))
-        raise RuntimeError("Algorithms remain unused: ".format(algos))
+        raise RuntimeError("Algorithms remain unused. See above. ")
 
     return tablePosition, dbtables
 
