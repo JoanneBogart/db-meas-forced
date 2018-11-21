@@ -69,7 +69,15 @@ def main():
     parser.add_argument('--no-insert', dest='no_insert', action='store_true',
                         help="Just create tables and views; no inserts", 
                         default=False)
+    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', help="If supplied, ingest data for specified tracts only. Otherwise ingest all")
     args = parser.parse_args()
+
+    if args.tracts is not None:
+        print("Processing the following tracts:")
+        for t in args.tracts: print(t)
+
+    #   temp for debugging
+    #   return
 
     if args.db_server:
         lib.config.dbServer.update(keyvalue.split('=', 1) for keyvalue in itertools.chain.from_iterable(args.db_server))
@@ -87,10 +95,15 @@ def main():
                                          args.table_name, filters, args.dryrun)
         sys.stdout.flush()
         sys.stderr.flush()
+        if args.tracts: 
+            tracts = args.tracts
+        else:
+            tracts = None
         if not args.no_insert:
             print("invoking insert_into_mastertable")
             insert_into_mastertable(args.rerunDir, args.schemaName, 
-                                    args.table_name, filters, args.dryrun)
+                                    args.table_name, filters, args.dryrun,
+                                    tracts)
 
 
 def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
@@ -128,11 +141,14 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             db.close()
             drop_index_from_mastertable(rerunDir, schemaName, filters)
     else:
-        print("Would execute: ")
-        print(create_schema_string)
-        cursor = None
-        create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
-                           filters)
+        if bNeedCreating:
+            print("Would execute: ")
+            print(create_schema_string)
+            cursor = None
+            create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
+                               filters)
+        else:
+            print("Master table already exists")
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     """
     Create the master table.
@@ -310,7 +326,7 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
 
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
-                            dryrun):
+                            dryrun, tracts):
     """
     Insert data into the master table.
     The data will actually flow not into the master table but into its children.
@@ -324,8 +340,19 @@ def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
         List of filter names
     @param dryrun
         If True just print commands rather than executing
+    @param tracts
+        If present (not None) insert data only from specified tracts. Else
+        insert data from all tracts
     """
-    for tract in lib.common.get_existing_tracts(rerunDir):
+    all_tracts = lib.common.get_existing_tracts(rerunDir)
+    our_tracts = []
+    if tracts == None:
+        our_tracts = all_tracts
+    else:
+        for t in tracts:
+            if t in all_tracts: our_tracts.append(t)
+
+    for tract in our_tracts:
         for patch in get_existing_patches(rerunDir, tract):
             insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun)
 
@@ -518,7 +545,6 @@ def get_ref_schema_from_file(path):
         * "coord" is {"ra": numpy.array, "dec": numpy.array},
             in which angles are in degrees.
     """
-    #print("Getting ref_schema")
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
     #with  open('original_ref_fields.txt', 'w') as f:
     #    for fld in table.fields:
@@ -695,9 +721,6 @@ def get_catalog_schema_from_file(path, object_id):
 
     #print("getting catalog schema")
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
-    #with  open('original_fields.txt', 'w') as f:
-    #    for fld in table.fields:
-    #        print(fld, file=f)
 
     these_object_id = table.cutout_subtable("id").fields["id"].data
 
@@ -817,7 +840,6 @@ def get_an_existing_catalog_id(rerunDir, schemaName):
     """
     pattern = get_catalog_path(rerunDir, "*", "*", "*", False, schemaName)
 
-    #print("pattern is ", str(pattern))
     for catPath in itertools.chain(glob.iglob(pattern), glob.iglob(pattern + ".gz")):
         #print('catPath is: ', catPath)
         tract, patch, filter = lib.common.path_decompose(catPath)
