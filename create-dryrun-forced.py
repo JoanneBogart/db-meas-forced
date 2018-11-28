@@ -42,6 +42,8 @@ import textwrap
 
 def main():
     import argparse
+    cmdline = ' '.join(sys.argv)
+    print('Invocation: ' + cmdline)
     parser = argparse.ArgumentParser(
         fromfile_prefix_chars='@',
         description='Read a rerun directory to create "forced" summary table.')
@@ -550,6 +552,9 @@ def get_ref_schema_from_file(path):
     #    for fld in table.fields:
     #        print(fld, file=f)
 
+    # All fields starting with 'id' are removed from source table 'table'
+    # and put in a new table.  In practice this table has a single column
+    # named 'object_id'
     object_id = table.cutout_subtable("id").fields["id"].data
 
     algos = PoppingOrderedDict(
@@ -714,7 +719,7 @@ def get_catalog_schema_from_file(path, object_id):
     @param path
         Path to a "forced-*.fits" file
     @param object_id
-        numpy.array of object ID from the corresponding "forced-*.fits" file.
+        numpy.array of object ID from the corresponding "ref-*.fits" file.
     @return
         PoppingOrderedDict mapping name: str -> table: DBTable.
     """

@@ -27,6 +27,8 @@ def _import_algo(name):
         "Algo_" + name,
     )
 
+# Associate column class name/prefix (e.g., 'detect') with package which
+# handles it.
 ref_algos = PoppingOrderedDict(
     (_name, _import_algo(_name))
     for _name in (
@@ -68,7 +70,8 @@ ref_algos_ignored = [
     #"subaru_FilterFraction_",                 # doesn't exist for LSST
 ]
 
-
+# Associate column class name/prefix (e.g., 'detect') with package which
+# handles it.
 forced_algos = PoppingOrderedDict(
     (_name, _import_algo(_name))
     for _name in (
