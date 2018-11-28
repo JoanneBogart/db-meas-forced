@@ -945,12 +945,13 @@ def extract_schema_fields(schemaName):
     (single digit), D is minor version (one or more digits) and 
     S is simulator type (one of 'p' or 'i').   Return a triple
     (major-version, minor-version, sim-type)
+    Optionally allow _ followed by a "word" (all lower case letters)
     @param schemaName
     """
     if schemaName is None: 
         return(None, None, None)
 
-    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)\Z'
+    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)(_[a-z]+)?\Z'
     result = re.match(pat, schemaName)
     if result:
         return(result.group(0), result.group(1), result.group(2))
