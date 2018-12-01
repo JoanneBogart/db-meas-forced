@@ -240,8 +240,9 @@ class Algo(object):
             in positionerrs, shapes, etc.
         """
 
-        # Don't do it!
-        #_AlgoTransformer(self, rerunDir, tract, patch, filter, coord).transform()
+        #  Almost everything is commented out. See _AlgoTransformer.transform()
+        #  below.
+        _AlgoTransformer(self, rerunDir, tract, patch, filter, coord).transform()
         return
 
     def get_backend_fields(self, prefix):
@@ -382,18 +383,19 @@ class _AlgoTransformer(object):
     def transform(self):
         """
         Do transformations
+        For native DC2 data skip everything but _to_singleprecision( )
         """
-        self._transform_positions()
-        self._transform_positionerrs()
-        self._transform_positionsigmas()
-        self._transform_sizes()
-        self._transform_shapes()
-        self._transform_shapeerrs()
-        self._transform_shapesigmas()
-        self._transform_ellipticities()
-        self._transform_angles()
+        #self._transform_positions()
+        #self._transform_positionerrs()
+        #self._transform_positionsigmas()
+        #self._transform_sizes()
+        #self._transform_shapes()
+        #self._transform_shapeerrs()
+        #self._transform_shapesigmas()
+        #self._transform_ellipticities()
+        #self._transform_angles()
         self._to_singleprecision()
-        self._rename()
+        #self._rename()
 
     def _transform_positions(self):
         for desc in self.algoclass.positions:
