@@ -126,8 +126,9 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
     db = lib.common.new_db_connection()
 
     with db.cursor() as cursor:
+        # In case no views were created, modify this test to use a table
         try:
-            cursor.execute('SELECT 0 FROM "{schemaName}"."{masterTableName}" WHERE FALSE;'.format(**locals()))
+            cursor.execute('SELECT 0 FROM "{schemaName}"."_{masterTableName}:position" WHERE FALSE;'.format(**locals()))
         except psycopg2.ProgrammingError:
             bNeedCreating = True
             db.rollback()
@@ -191,6 +192,9 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     for table in itertools.chain(universals.values(), multibands.values()):
         table.create(cursor, schemaName)
 
+    #  OMIT FOR NOW -- no views
+
+
     # Create master table
     commentOnTable = textwrap.dedent("""
     The summary table of forced photometry on coadd images.
@@ -226,7 +230,7 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     Use of these functions will significantly speed up your query.
     </p><p>
     Field search functions are also available in where-clauses. They are used like:
-    <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND isprimary;</code>
+    <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND detect_isprimary;</code>
     (#### is a field name) To get the full list of field search functions, say help() to the database server:
     <code>SELECT * FROM help('{schemaName}.search_%');</code>
     """).strip().format(**locals())
@@ -234,97 +238,98 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     # Because the number of columns exceeds PostgreSQL's limit,
     # we divide the master table into "forced", "forced2", "forced3", ...
 
-    listUniversals = [universals]
-    listMultibands = [multibands]
-    listMultibands.append(multibands.pop_many([
-        '_forced:part2',
-    ]))
-    listMultibands.append(multibands.pop_many([
-        '_forced:part3',
-    ]))
-    (major, minor, sim_type) = extract_schema_fields(schemaName)
-    if major == None or (str(major) == '1' and str(minor) == '1'):
-        pass
-    else:
-        listMultibands.append(multibands.pop_many([
-            '_forced:part4',
-        ]))
+    # START COMMENTING OUT VIEW STUFF HERE
+    # listUniversals = [universals]
+    # listMultibands = [multibands]
+    # listMultibands.append(multibands.pop_many([
+    #     '_forced:part2',
+    # ]))
+    # listMultibands.append(multibands.pop_many([
+    #     '_forced:part3',
+    # ]))
+    # (major, minor, sim_type) = extract_schema_fields(schemaName)
+    # if major == None or (str(major) == '1' and str(minor) == '1'):
+    #     pass
+    # else:
+    #     listMultibands.append(multibands.pop_many([
+    #         '_forced:part4',
+    #     ]))
 
-    for iPart, (universals, multibands) in enumerate(
-        itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
-        start=1
-    ):
-        dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
-        if len(dbTables) > 1:
-            dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
-                'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
-                for table in dbTables[1:]
-            ]
-            dbTables = """
-            """.join(dbTables)
-        else:
-            dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
+    # for iPart, (universals, multibands) in enumerate(
+    #     itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
+    #     start=1
+    # ):
+    #     dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
+    #     if len(dbTables) > 1:
+    #         dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
+    #             'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
+    #             for table in dbTables[1:]
+    #         ]
+    #         dbTables = """
+    #         """.join(dbTables)
+    #     else:
+    #         dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
 
-        fieldDefs = []
-        for table in universals.values():
-            fieldDefs += table.get_exported_fields("")
+    #     fieldDefs = []
+    #     for table in universals.values():
+    #         fieldDefs += table.get_exported_fields("")
 
-        for filter in filters:
-            for table in multibands.values():
-                fieldDefs += table.get_exported_fields(filter)
+    #     for filter in filters:
+    #         for table in multibands.values():
+    #             fieldDefs += table.get_exported_fields(filter)
 
-        fieldDefs.insert(0, ("object_id", "object_id", "",
-            "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
-        ))
+    #     fieldDefs.insert(0, ("object_id", "object_id", "",
+    #         "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
+    #     ))
 
-        sFieldDefs = """,
-        """.join(
-            '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
-        )
+    #     sFieldDefs = """,
+    #     """.join(
+    #         '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
+    #     )
 
-        tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
+    #     tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
 
-        view_string = """
-        CREATE VIEW "{schemaName}"."{tableName}" AS (
-            SELECT
-                {sFieldDefs}
-            FROM
-                {dbTables}
-        )
-        """.format(**locals())
+    #     view_string = """
+    #     CREATE VIEW "{schemaName}"."{tableName}" AS (
+    #         SELECT
+    #             {sFieldDefs}
+    #         FROM
+    #             {dbTables}
+    #     )
+    #     """.format(**locals())
         
-        if cursor is not None:
-            cursor.execute(view_string)
-        else:
-            print(view_string)
+        # if cursor is not None:
+        #     cursor.execute(view_string)
+        # else:
+        #     print(view_string)
 
-        for name, definition, unit, doc in fieldDefs:
-            field_string = """
-            COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
-            """.format(**locals())
-            arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
+        # for name, definition, unit, doc in fieldDefs:
+        #     field_string = """
+        #     COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
+        #     """.format(**locals())
+        #     arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
             
-            fstype = type(field_string)
-            if fstype is not type('a'):
-                print("bad field string type ", fstype)
-                print('field_string is: ')
-                print(field_string)
-            if cursor is not None:
-                cursor.execute(field_string, arg_dict)
-            else:
-                print(field_string)
-                print(' to be bound with dict: ',arg_dict)
+        #     fstype = type(field_string)
+        #     if fstype is not type('a'):
+        #         print("bad field string type ", fstype)
+        #         print('field_string is: ')
+        #         print(field_string)
+        #     if cursor is not None:
+        #         cursor.execute(field_string, arg_dict)
+        #     else:
+        #         print(field_string)
+        #         print(' to be bound with dict: ',arg_dict)
 
-        table_comment="""
-        COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
-        """.format(**locals())
-        arg_dict = dict(comment = commentOnTable)
+        # table_comment="""
+        # COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
+        # """.format(**locals())
+        # arg_dict = dict(comment = commentOnTable)
         
-        if cursor is not None:
-            cursor.execute(table_comment, arg_dict)
-        else:
-            print(table_comment)
-            print(' to be bound with dict: ',arg_dict)
+        # if cursor is not None:
+        #     cursor.execute(table_comment, arg_dict)
+        # else:
+        #     print(table_comment)
+        #     print(' to be bound with dict: ',arg_dict)
 
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
@@ -594,7 +599,7 @@ def get_ref_schema_from_file(path):
 
     return dbtables, object_id, coord
 
-
+# Changes to accommodate leaving field 'parent' as is (no change to 'parent_id')
 class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
     def create_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.create_index(self, cursor, schemaName)
@@ -606,7 +611,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             "{self.name}_parent_id_idx"
         ON
             "{schemaName}"."{self.name}"
-            ( parent_id
+            ( parent
             )
         {indexSpace}
         """.format(**locals())
@@ -635,7 +640,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         """.format(**locals())
         )
 
-        # indices WHERE isprimary = True
+        # indices WHERE detect_isprimary = True
 
         cursor.execute("""
         CREATE UNIQUE INDEX
@@ -646,7 +651,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             )
         {indexSpace}
         WHERE
-          isprimary
+          detect_isprimary
         """.format(**locals())
         )
         cursor.execute("""
@@ -658,7 +663,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             )
         {indexSpace}
         WHERE
-          isprimary
+          detect_isprimary
         """.format(**locals())
         )
         cursor.execute("""
@@ -672,7 +677,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         {indexSpace}
         WHERE
             coord IS NOT NULL
-            AND isprimary
+            AND detect_isprimary
         """.format(**locals())
         )
 
@@ -695,7 +700,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         """.format(**locals())
         )
 
-        # indices WHERE isprimary = True
+        # indices WHERE detect_isprimary = True
 
         cursor.execute("""
         DROP INDEX IF EXISTS
