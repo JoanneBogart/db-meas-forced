@@ -152,6 +152,11 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
                                filters)
         else:
             print("Master table already exists")
+            print("pretend create anyway:")
+            print(create_schema_string)
+            cursor = None
+            create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
+                               filters)
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     """
     Create the master table.
@@ -508,8 +513,14 @@ def create_index_on_mastertable(rerunDir, schemaName, filters):
     db = lib.common.new_db_connection()
     with db.cursor() as cursor:
         for table in itertools.chain(universals.values(), multibands.values()):
-            table.create_index(cursor, schemaName)
-    db.commit()
+            if ('position' in table.name):
+                table.set_dbconnection(db)
+                table.create_index(cursor, schemaName)
+                table.set_dbconnection(None)
+            else:
+                table.create_index(cursor, schemaName)
+                db.commit()
+    #db.commit()
 
 
 def drop_index_from_mastertable(rerunDir, schemaName, filters):
@@ -587,9 +598,10 @@ def get_ref_schema_from_file(path):
     def add(name, sourcenames, dbtable_class=lib.dbtable.DBTable_BandIndependent):
         dbtables[name] = dbtable_class(name, algos.pop_many(sourcenames))
 
-    add("_forced:position", [
-        "ref_coord", "detect", "merge",
-    ], dbtable_class=DBTable_Position)
+    add("_forced:position", 
+        ["ref_coord", "detect", "merge","base_SdssCentroid", "base_PsfFlux",
+         "base_ClassificationExtendedness", "base_Blendedness","ext_shapeHSM"], 
+        dbtable_class=DBTable_Position)
 
     if algos:
         print("remaining algos:")
@@ -601,13 +613,20 @@ def get_ref_schema_from_file(path):
 
 # Changes to accommodate leaving field 'parent' as is (no change to 'parent_id')
 class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
+    def __init__(self, name, algos):
+        super().__init__(name, algos)
+        self.dbconn = None
+
+    def set_dbconnection(self, dbconn):
+        self.dbconn = dbconn
+
     def create_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.create_index(self, cursor, schemaName)
 
         indexSpace = lib.config.get_index_space()
 
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_parent_id_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -616,8 +635,9 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         {indexSpace}
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_skymap_id_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -626,8 +646,9 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         {indexSpace}
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_coord_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -639,11 +660,11 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             coord IS NOT NULL
         """.format(**locals())
         )
-
+        if (self.dbconn): self.dbconn.commit()
         # indices WHERE detect_isprimary = True
 
         cursor.execute("""
-        CREATE UNIQUE INDEX
+        CREATE UNIQUE INDEX IF NOT EXISTS
             "{self.name}_object_id_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -654,8 +675,9 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
           detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_skymap_id_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -666,8 +688,9 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
           detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_coord_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -680,6 +703,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             AND detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
 
     def drop_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.drop_index(self, cursor, schemaName)
@@ -764,12 +788,12 @@ def get_catalog_schema_from_file(path, object_id):
         "base_LocalBackground",
         "base_ClassificationExtendedness",    # not in lsst 1.1 data
         "modelfit_CModel",
+        "base_SdssCentroid",
+        "base_PsfFlux",
     ])
 
     add("_forced:part2", [
-        "base_SdssCentroid",
         "base_GaussianFlux",
-        "base_PsfFlux",
         "ext_photometryKron_KronFlux",   # not in lsst 1.1 data
         "base_SdssShape",
         "modelfit_DoubleShapeletPsfApprox",   # not in lsst 1.1 data
