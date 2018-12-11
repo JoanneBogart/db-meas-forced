@@ -155,6 +155,7 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             print("pretend create anyway:")
             print(create_schema_string)
             cursor = None
+
             create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
                                filters)
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
@@ -391,6 +392,7 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
         If True just print commands rather than executing
     """
     catPaths = {}
+
     for filter in filters:
         catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
                                    schemaName=schemaName)
@@ -552,6 +554,7 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
     db.commit()
 
 
+
 def get_ref_schema_from_file(path):
     """
     Get fields in a "ref-*.fits" file.
@@ -577,6 +580,7 @@ def get_ref_schema_from_file(path):
         (name, algoclass(table))
         for name, algoclass in lib.forced_algos.ref_algos.items()
     )
+
     #for name, algoclass in lib.forced_algos.ref_algos.items():
     #    if 'ConvolvedFlux_seeing' in name:
     #        print('name is ', name, ' and algoclass is ', str(algoclass))
@@ -595,13 +599,44 @@ def get_ref_schema_from_file(path):
         lib.misc.warning('Ignored field: ', field, 'in', path)
 
     dbtables = PoppingOrderedDict()
-    def add(name, sourcenames, dbtable_class=lib.dbtable.DBTable_BandIndependent):
+    def add(name, sourcenames, 
+            dbtable_class=lib.dbtable.DBTable_BandIndependent):
         dbtables[name] = dbtable_class(name, algos.pop_many(sourcenames))
 
-    add("_forced:position", 
-        ["ref_coord", "detect", "merge","base_SdssCentroid", "base_PsfFlux",
-         "base_ClassificationExtendedness", "base_Blendedness","ext_shapeHSM"], 
-        dbtable_class=DBTable_Position)
+    #   New table names:
+    #       position (= old _forced:position)
+    #       dpdd_ref (remaining quantitites from ref used in dpdd)
+    #       misc_ref  (everything else in ref)
+    #       dpdd_forced (multiband quantities in dpdd)
+    #       forced2
+    #       forced3
+    #       forced4
+    #       forced5
+    #   view dpdd will come from position join dpdd_ref join dpdd_forced
+
+    add("position", [
+        "ref_coord", "detect", "merge"
+    ], dbtable_class=DBTable_Position)
+    add("dpdd_ref",
+        ["base_SdssCentroid", "base_PsfFlux","base_ClassificationExtendedness",
+         "base_Blendedness","base_PixelFlags", "ext_shapeHSM", 
+         "modelfit_CModel",])
+    add("dpdd_misc",
+        ["base_CircularApertureFlux",
+         "base_FootprintArea",
+         "base_GaussianCentroid",
+         "base_GaussianFlux",
+         "base_InputCount",
+         "base_LocalBackground",
+         "base_NaiveCentroid",
+         "base_SdssShape",
+         "base_Variance",
+         "calib",
+         "deblend",
+         "ext_convolved_ConvolvedFlux",
+         "ext_photometryKron_KronFlux",
+         "footprint",
+         "modelfit_DoubleShapeletPsfApprox",])
 
     if algos:
         print("remaining algos:")
@@ -622,7 +657,6 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
 
     def create_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.create_index(self, cursor, schemaName)
-
         indexSpace = lib.config.get_index_space()
 
         cursor.execute("""
@@ -661,8 +695,8 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         """.format(**locals())
         )
         if (self.dbconn): self.dbconn.commit()
-        # indices WHERE detect_isprimary = True
 
+        # indices WHERE detect_isprimary = True
         cursor.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS
             "{self.name}_object_id_primary_idx"
@@ -781,7 +815,7 @@ def get_catalog_schema_from_file(path, object_id):
     def add(name, sourcenames, dbtable_class=lib.dbtable.DBTable):
         dbtables[name] = dbtable_class(name, algos.pop_many(sourcenames))
 
-    add("_forced:part1", [
+    add("dpdd_forced", [
         "base_PixelFlags",
         "base_InputCount",
         "base_Variance",
@@ -792,7 +826,7 @@ def get_catalog_schema_from_file(path, object_id):
         "base_PsfFlux",
     ])
 
-    add("_forced:part2", [
+    add("forced2", [
         "base_GaussianFlux",
         "ext_photometryKron_KronFlux",   # not in lsst 1.1 data
         "base_SdssShape",
@@ -801,15 +835,22 @@ def get_catalog_schema_from_file(path, object_id):
         "undeblended_ext_photometryKron_KronFlux",  # not in lsst 1.1 data
     ])
 
-    add("_forced:part3", [
+    add("forced3", [
         "base_CircularApertureFlux",
         "undeblended_base_CircularApertureFlux",   # not in lsst 1.1 data
+        "base_TransformedCentroid",
+        "base_TransformedShape",
+        "multi_coord",
     ])
 
     # Put this back in for Run1.2
     # NOTE:  This code will no longer work for 1.1
-    add("_forced:part4", [
+    add("forced4", [
         "ext_convolved_ConvolvedFlux",
+    ])
+
+    add("forced5", [
+        "undeblended_ext_convolved_ConvolvedFlux",
     ])
 
     if algos:
