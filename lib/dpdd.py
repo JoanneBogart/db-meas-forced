@@ -120,14 +120,21 @@ class DpddView(object):
             """.join(join_list)
 
         
-        dpdd_yaml = DpddYaml(open(self.yaml_path))
+        dpdd_yaml = DpddYaml(open(self.yaml_path)).parse()
         if self.yaml_override:
-            override_yaml = DpddYaml(open(self.yaml_override))
+            override_yaml = DpddYaml(open(self.yaml_override)).parse()
             for i in override_yaml:
-                dpdd_yaml[i] = override_yaml[i]
+                # Find elt in dpdd_yaml with same DPDDname
+                # delete
+                # add override entry instead.
+                for j in dpdd_yaml:
+                    if j['DPDDname'] == i['DPDDname']:
+                        j['NativeInputs'] = i['NativeInputs']
+                        for key in ['Datatype', 'RPN']:
+                            if key in i: j[key] = i[key]
 
         fields = []
-        for i in dpdd_yaml.parse():
+        for i in dpdd_yaml:
             r = self.resolve(i)
             if r: fields += r
             #r = DpddYaml.resolve(i)
@@ -147,10 +154,10 @@ class DpddView(object):
 import sys
 if __name__ =='__main__':
     if len(sys.argv) > 1: 
-        yaml_file = argv[1] 
+        yaml_file = sys.argv[1] 
     else: yaml_file = 'native_to_dpdd.yaml'
     if len(sys.argv) > 2: 
-        override_file = argv[2] 
+        override_file = sys.argv[2] 
     else: override_file = None
 
     view = DpddView('run12p_native', yaml_path = yaml_file, 
