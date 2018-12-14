@@ -61,7 +61,7 @@
     NativeInputs: [ext_shapeHSM_HsmSourceMoments_xy]
     DPDDname: Ixy
 -
-    NativeInputs: [ext_shapeHSM_HsmSourceMomemnts_flag]
+    NativeInputs: [ext_shapeHSM_HsmSourceMoments_flag]
     DPDDname: I_flag
     Datatype: flag
 -
@@ -77,13 +77,16 @@
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}']
     DPDDname: 'mag_{BAND}'
     Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
-    RPN: [x1, log10, -2.5, '*', 27.0, '+']
+    RPN: [x1, '_forced:export_mag()']
+    # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
+
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}', 
-                   '{BAND}_modelfit_CMOdel_{FLUX}{ERR}']
+                   '{BAND}_modelfit_CModel_{FLUX}{ERR}']
     DPDDname: 'magerr_{BAND}'
     Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
-    RPN: [2.5,x2,'*',x1,log10,x1,'*','/']
+    RPN: [x1, x2, '_forced:export_magerr(,)'] 
+    # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}',
                    '{BAND}_modelfit_Cmodel_{FLUX}{ERR}']
@@ -95,7 +98,7 @@
     DPDDname: 'psFlux_{BAND}'
 -
     NativeInputs: ['{BAND}_base_PsfFlux_flag']
-    DPDDname: 'psFlux_{BAND}'
+    DPDDname: 'psFlux_flag_{BAND}'
 -
     NativeInputs: ['{BAND}_base_psfFlux_{FLUX}{ERR}']
     DPDDname: 'psFluxErr_{BAND}'
@@ -125,10 +128,10 @@
     DPDDname:     good
     Datatype:     flag
     Lambda:       'lambda x: not x'
-    RPN:          [x1, '!']
+    RPN:          [x1, 'not']
 -
     NativeInputs: [base_PixelFlags_flag, deblend_skipped]
     DPDDname:     clean
     Datatype:     flag
     Lambda:       'lambda x, y: not (x or y)'
-    RPN:          [x1, x2,'|', '!']
+    RPN:          [x1, x2,'or', 'not']

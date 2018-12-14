@@ -1,0 +1,14 @@
+-
+  NativeInputs: [position.object_id]
+  Datatype: long
+  DPDDname: objectId
+-
+  NativeInputs: [coord]
+  Datatype: double
+  DPDDname: ra
+  RPN: [x1, 'public.coord_to_ra()']
+-
+  NativeInputs: [coord]
+  Datatype: double
+  DPDDname: dec
+  RPN: [x1, 'public.coord_to_dec()']

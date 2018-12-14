@@ -66,6 +66,10 @@ class SourceTable(object):
         self.fields = excluded
         return SourceTable(included, self.slots, self.fitsheader)
 
+    def dm_schema_version(self):
+        if 'AFW_TABLE_VERSION' in self.fitsheader:
+            return self.fitsheader['AFW_TABLE_VERSION']
+        return None
 
     @staticmethod
     def from_hdu(hdu):

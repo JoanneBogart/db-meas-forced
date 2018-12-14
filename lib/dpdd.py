@@ -1,5 +1,6 @@
 # Copyright notice??
 from yaml import load as yload
+import re
 
 class DpddYaml(object):
     """
@@ -80,45 +81,95 @@ class DpddView(object):
             n_dict[i['DPDDname']] = itemdict
         return n_dict      
 
+    @staticmethod
+    def rpn_value(inputs, rpn):
+        argstack = []
+        varpat = re.compile('x(\d+)$')
+        funcpat = re.compile('([a-zA-Z_]+[:a-zA-Z0-9_.]*)\(\)$')
+        func2pat = re.compile('([a-zA-Z_]+[:a-zA-Z0-9_.]*)\(,\)$')
+        for elt in rpn:
+            #print("found elt {} of type {}".format(elt, type(elt)))
+            try:
+                s = float(elt)
+                argstack.append(str(elt))
+                continue
+            except ValueError:
+                pass
+            m = varpat.match(str(elt))
+            if m:
+                i = int(m.group(1))
+                if i > len(rpn):
+                    raise ValueError('RPN elt {} references non-existent input'.format(elt))
+                # push onto stack
+                argstack.append(inputs[i - 1])
+                continue
+            if str(elt) in ['*', '+', '-', '/', '|', '%', '&', 'or', 'and']:
+                res = '({} {} {})'.format(argstack.pop(),elt,argstack.pop())
+                argstack.append(res)
+                continue
+            if str(elt) in ['!', 'not']:
+                res = '({} {})'.format(elt, argstack.pop())
+                argstack.append(res)
+                continue
+            m = funcpat.match(str(elt))
+            if m:
+                f = m.group(1)
+                if ':' in f:
+                    f = '"' + f + '"'
+                res = '{}({})'.format(f, argstack.pop())
+                argstack.append(res)
+                continue
+            m = func2pat.match(str(elt))
+            if m:
+                f = m.group(1)
+                if ':' in f:
+                    f = '"' + f + '"'
+                res = '{}({},{})'.format(f, argstack.pop(), 
+                                         argstack.pop())
+                argstack.append(res)
+                continue
+            else:
+                raise ValueError('Unknown element {} in RPN list'.format(elt))
+        if (len(argstack) != 1 ):
+            raise ValueError('Bad RPN list')
+        return argstack.pop()    
+
     def resolve(self, item_dict):
         # most common case is single native mapping to dpdd field
         # Return a list because we need it if BAND appears
-        import re
 
         if 'RPN' in item_dict:
-            return None          # not yet implemented
+            value = self.rpn_value(item_dict['NativeInputs'], 
+                                   item_dict['RPN'])
+        else:
+            value = item_dict['NativeInputs'][0]
 
         # Make AS string
-        
-        asv = '{} AS {}'.format(item_dict['NativeInputs'][0], 
-                               item_dict['DPDDname'])
-        # Sub for FLUX, ERR
+        asv = '{} AS {}'.format(value, item_dict['DPDDname'])
         FLUX = self.FLUX
         ERR = self.ERR
-        BAND = '{}'
+        BAND = '{BAND}'
         asv = asv.format(**locals())
         asvl = []
-        if re.match(r".*\{\}.*", asv):
+        if re.match(r".*\{BAND\}.*", asv):
             for b in self.bands:
-                f = asv.format(b, b)
+                f = re.sub(r"\{BAND\}",b, asv)
+                #f = asv.format(b, b)
                 asvl += [f]
             return asvl
         else: return [asv]        
         
-
     def view_string(self):
-    
         dbschema = self.dbschema
         if len(self.tables) == 1:
-            table_spec = '"{}.{}"'.format(dbschema, self.tables[0])
+            table_spec = '"{}"."{}"'.format(dbschema, self.tables[0])
         else:
-            join_list = [ '"{}.{}"'.format(dbschema, self.tables[0]) ] 
+            join_list = [ '"{}"."{}"'.format(dbschema, self.tables[0]) ] 
             for table in self.tables[1:]:
                 join_list.append('LEFT JOIN "{}"."{}" USING (object_id)'.format(dbschema, table) )
                   
             table_spec = """
             """.join(join_list)
-
         
         dpdd_yaml = DpddYaml(open(self.yaml_path)).parse()
         if self.yaml_override:
@@ -167,3 +218,8 @@ if __name__ =='__main__':
     cv = view.view_string()
 
     print(cv)
+
+    res = DpddView.rpn_value(['the_first', 'the_second'],
+                             ['x1', 'x2', '+','x1','*'])
+
+    print(res)

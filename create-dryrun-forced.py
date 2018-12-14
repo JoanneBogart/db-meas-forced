@@ -27,6 +27,7 @@ import lib.sourcetable
 import lib.common
 import lib.config
 from lib.misc import PoppingOrderedDict
+from lib.dpdd import DpddView
 
 if lib.config.MULTICORE:
     from lib import pipe_printf
@@ -128,17 +129,20 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
     with db.cursor() as cursor:
         # In case no views were created, modify this test to use a table
         try:
-            cursor.execute('SELECT 0 FROM "{schemaName}"."_{masterTableName}:position" WHERE FALSE;'.format(**locals()))
+            cursor.execute('SELECT 0 FROM "{schemaName}"."position" WHERE FALSE;'.format(**locals()))
         except psycopg2.ProgrammingError:
             bNeedCreating = True
             db.rollback()
 
     create_schema_string = 'CREATE SCHEMA IF NOT EXISTS "{schemaName}"'.format(**locals())
+    dm_schema = 1
     if (not dryrun):
         if bNeedCreating:
             with db.cursor() as cursor:
                 cursor.execute(create_schema_string)
-                create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters)
+                dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                               masterTableName, filters)
+                create_view(cursor, schemaName, dm_schema)
             db.commit()
         else:
             db.close()
@@ -148,16 +152,17 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             print("Would execute: ")
             print(create_schema_string)
             cursor = None
-            create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
-                               filters)
+            dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                           masterTableName, filters)
+            create_view(cursor, schemaName, dm_schema)
         else:
             print("Master table already exists")
             print("pretend create anyway:")
             print(create_schema_string)
             cursor = None
-
-            create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
-                               filters)
+            dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                           masterTableName, filters)
+            create_view(cursor, schemaName, dm_schema)
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     """
     Create the master table.
@@ -183,63 +188,80 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
                                schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
+    if dm_schema is None: dm_schema = 1
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
         table.set_filters(filters)
 
     for table in itertools.chain(universals.values(), multibands.values()):
-        if ('position' in table.name):
-            print("About to transform table ", table.name)
+        #if ('position' in table.name):
+        #    print("About to transform table ", table.name)
         table.transform(rerunDir, tract, patch, filter, coord)
 
     # Create source tables
     for table in itertools.chain(universals.values(), multibands.values()):
         table.create(cursor, schemaName)
 
-    #  OMIT FOR NOW -- no views
+    #  Make a view for dpdd
+    # yaml_path = os.path.join(os.getenv('DPDD_YAML'),'native_to_dpdd.yaml')
+    # yaml_override = os.path.join(os.getenv('DPDD_YAML'),
+    #                              'postgres_override.yaml')
+    # view_builder = DpddView(schemaName, yaml_path=yaml_path,
+    #                         yaml_override=yaml_override,
+    #                         dm_schema_version=int(dm_schema))
+    # vs = view_builder.view_string()
+    # if cursor:
+    #     cursor.execute(vs)
+    # else:
+    #     print("Create view command would be:")
+    #     print(vs)
+                            
+    return dm_schema
+
+    #  OMIT FOR NOW -- no old-style views
 
 
     # Create master table
-    commentOnTable = textwrap.dedent("""
-    The summary table of forced photometry on coadd images.
-    </p><p>Fluxes are in CGS units, and positions are in sky coordinates.
-    Shapes and ellipticities are re-projected into the planes tangent
-    to the celestial sphere at the objects' own positions  (the first
-    axis parallels RA, the second axis DEC; the coordinates in the tangent
-    planes are flipped compared to coadd images).
-    </p><p>This table is a part of the whole summary table, which has been split
-    into parts due to PostgreSQL's technical limit of the number of columns permitted
-    in a table. To get columns in two or more parts of the whole summary table, join
-    the parts together:
-    </p><pre>
-      SELECT ... FROM
-        {schemaName}.forced
-        LEFT JOIN {schemaName}.forced2 USING (object_id)
-        LEFT JOIN {schemaName}.forced3 USING (object_id)
-        ...
-    </pre><p>Use 'LEFT JOIN' instead of 'JOIN' and place the plain 'forced'
-    (the one without suffix) at the first position in order for PostgreSQL to optimize the query.
-    </p><p>The following search functions are available in where-clauses:</p><dl>
-      <dt><b>coneSearch</b>(coord, RA[deg], DEC[deg], RADIUS[arcsec]) -> boolean</dt>
-      <dd>This function returns True if <code>coord</code> is within a circle at (RA, DEC) with its radius RADIUS.</dd>
-      <dt><b>boxSearch</b>(coord, RA1, RA2, DEC1, DEC2) -> boolean</dt>
-      <dd>This function returns True if <code>coord</code> is within a box [RA1, RA2] x [DEC1, DEC2] (Units are degrees).
-        Note that <code>boxSearch(coord, 350, 370, DEC1, DEC2)</code> is different from <code>boxSearch(coord, 350, 10, DEC1, DEC2).</code>
-        In the former, ra \in [350, 360] U [0, 10]; while in the latter, ra \in [10, 350].</dd>
-      <dt><b>tractSearch</b>(object_id, TRACT) -> boolean</dt>
-      <dd>This function returns True if tract = TRACT.</dd>
-      <dt><b>tractSearch</b>(object_id, TRACT1, TRACT2) -> boolean</dt>
-      <dd>This function returns True if tract \in [TRACT1, TRACT2].</dd>
-    </dl><p>
-    Use of these functions will significantly speed up your query.
-    </p><p>
-    Field search functions are also available in where-clauses. They are used like:
-    <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND detect_isprimary;</code>
-    (#### is a field name) To get the full list of field search functions, say help() to the database server:
-    <code>SELECT * FROM help('{schemaName}.search_%');</code>
-    """).strip().format(**locals())
+    # commentOnTable = textwrap.dedent("""
+    # The summary table of forced photometry on coadd images.
+    # </p><p>Fluxes are in CGS units, and positions are in sky coordinates.
+    # Shapes and ellipticities are re-projected into the planes tangent
+    # to the celestial sphere at the objects' own positions  (the first
+    # axis parallels RA, the second axis DEC; the coordinates in the tangent
+    # planes are flipped compared to coadd images).
+    # </p><p>This table is a part of the whole summary table, which has been split
+    # into parts due to PostgreSQL's technical limit of the number of columns permitted
+    # in a table. To get columns in two or more parts of the whole summary table, join
+    # the parts together:
+    # </p><pre>
+    #   SELECT ... FROM
+    #     {schemaName}.forced
+    #     LEFT JOIN {schemaName}.forced2 USING (object_id)
+    #     LEFT JOIN {schemaName}.forced3 USING (object_id)
+    #     ...
+    # </pre><p>Use 'LEFT JOIN' instead of 'JOIN' and place the plain 'forced'
+    # (the one without suffix) at the first position in order for PostgreSQL to optimize the query.
+    # </p><p>The following search functions are available in where-clauses:</p><dl>
+    #   <dt><b>coneSearch</b>(coord, RA[deg], DEC[deg], RADIUS[arcsec]) -> boolean</dt>
+    #   <dd>This function returns True if <code>coord</code> is within a circle at (RA, DEC) with its radius RADIUS.</dd>
+    #   <dt><b>boxSearch</b>(coord, RA1, RA2, DEC1, DEC2) -> boolean</dt>
+    #   <dd>This function returns True if <code>coord</code> is within a box [RA1, RA2] x [DEC1, DEC2] (Units are degrees).
+    #     Note that <code>boxSearch(coord, 350, 370, DEC1, DEC2)</code> is different from <code>boxSearch(coord, 350, 10, DEC1, DEC2).</code>
+    #     In the former, ra \in [350, 360] U [0, 10]; while in the latter, ra \in [10, 350].</dd>
+    #   <dt><b>tractSearch</b>(object_id, TRACT) -> boolean</dt>
+    #   <dd>This function returns True if tract = TRACT.</dd>
+    #   <dt><b>tractSearch</b>(object_id, TRACT1, TRACT2) -> boolean</dt>
+    #   <dd>This function returns True if tract \in [TRACT1, TRACT2].</dd>
+    # </dl><p>
+    # Use of these functions will significantly speed up your query.
+    # </p><p>
+    # Field search functions are also available in where-clauses. They are used like:
+    # <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND detect_isprimary;</code>
+    # (#### is a field name) To get the full list of field search functions, say help() to the database server:
+    # <code>SELECT * FROM help('{schemaName}.search_%');</code>
+    # """).strip().format(**locals())
 
     # Because the number of columns exceeds PostgreSQL's limit,
     # we divide the master table into "forced", "forced2", "forced3", ...
@@ -337,6 +359,21 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
         #     print(table_comment)
         #     print(' to be bound with dict: ',arg_dict)
 
+def create_view(cursor, schemaName, dm_schema):
+    #  Make a view for dpdd
+    yaml_path = os.path.join(os.getenv('DPDD_YAML'),'native_to_dpdd.yaml')
+    yaml_override = os.path.join(os.getenv('DPDD_YAML'),
+                                 'postgres_override.yaml')
+    view_builder = DpddView(schemaName, yaml_path=yaml_path,
+                            yaml_override=yaml_override,
+                            dm_schema_version=int(dm_schema))
+    vs = view_builder.view_string()
+    if cursor:
+        cursor.execute(vs)
+    else:
+        print("Create view command would be:")
+        print(vs)
+
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
                             dryrun, tracts):
@@ -410,7 +447,7 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
             use_cursor = None
 
         refPath = get_ref_path(rerunDir, tract, patch)
-        universals, object_id, coord = get_ref_schema_from_file(refPath)
+        universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
 
         for table in itertools.chain(universals.values()):
             table.transform(rerunDir, tract, patch, "", coord)
@@ -506,7 +543,7 @@ def create_index_on_mastertable(rerunDir, schemaName, filters):
                                schemaName=schemaName)
     refPath = get_ref_path    (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals, object_id, coord, dm_schema = get_ref_schema_from_file(refPath)
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
@@ -541,7 +578,7 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
                                schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals, object_id, coord, dm_schema = get_ref_schema_from_file(refPath)
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
@@ -553,8 +590,6 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
             table.drop_index(cursor, schemaName)
     db.commit()
 
-
-
 def get_ref_schema_from_file(path):
     """
     Get fields in a "ref-*.fits" file.
@@ -565,11 +600,13 @@ def get_ref_schema_from_file(path):
         * "object_id" is a numpy.array of object_id,
         * "coord" is {"ra": numpy.array, "dec": numpy.array},
             in which angles are in degrees.
+        * "dm_schema_version" Value of 'AFW_TABLE_VERSION' keyword
     """
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
     #with  open('original_ref_fields.txt', 'w') as f:
     #    for fld in table.fields:
     #        print(fld, file=f)
+    dm_schema_version = table.dm_schema_version()
 
     # All fields starting with 'id' are removed from source table 'table'
     # and put in a new table.  In practice this table has a single column
@@ -620,8 +657,8 @@ def get_ref_schema_from_file(path):
     add("dpdd_ref",
         ["base_SdssCentroid", "base_PsfFlux","base_ClassificationExtendedness",
          "base_Blendedness","base_PixelFlags", "ext_shapeHSM", 
-         "modelfit_CModel",])
-    add("dpdd_misc",
+         "base_SdssShape", "modelfit_CModel", "deblend", ])
+    add("misc_ref",
         ["base_CircularApertureFlux",
          "base_FootprintArea",
          "base_GaussianCentroid",
@@ -629,10 +666,8 @@ def get_ref_schema_from_file(path):
          "base_InputCount",
          "base_LocalBackground",
          "base_NaiveCentroid",
-         "base_SdssShape",
          "base_Variance",
          "calib",
-         "deblend",
          "ext_convolved_ConvolvedFlux",
          "ext_photometryKron_KronFlux",
          "footprint",
@@ -644,7 +679,7 @@ def get_ref_schema_from_file(path):
         for k in algos: print(str(k))
         raise RuntimeError("Algorithms remain unused; see above ")
 
-    return dbtables, object_id, coord
+    return dbtables, object_id, coord, dm_schema_version
 
 # Changes to accommodate leaving field 'parent' as is (no change to 'parent_id')
 class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
@@ -823,13 +858,13 @@ def get_catalog_schema_from_file(path, object_id):
         "base_ClassificationExtendedness",    # not in lsst 1.1 data
         "modelfit_CModel",
         "base_SdssCentroid",
+        "base_SdssShape",
         "base_PsfFlux",
     ])
 
     add("forced2", [
         "base_GaussianFlux",
         "ext_photometryKron_KronFlux",   # not in lsst 1.1 data
-        "base_SdssShape",
         "modelfit_DoubleShapeletPsfApprox",   # not in lsst 1.1 data
         "undeblended_base_PsfFlux",
         "undeblended_ext_photometryKron_KronFlux",  # not in lsst 1.1 data
