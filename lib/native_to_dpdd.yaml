@@ -75,7 +75,7 @@
     DPDDname:   IxyPSF
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}']
-    DPDDname: 'mag_{BAND}'
+    DPDDname: 'mag_{BAND}_cModel'
     Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
     RPN: [x1, '_forced:export_mag()']
     # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
@@ -83,7 +83,7 @@
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}', 
                    '{BAND}_modelfit_CModel_{FLUX}{ERR}']
-    DPDDname: 'magerr_{BAND}'
+    DPDDname: 'magerr_{BAND}_cModel'
     Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
     RPN: [x1, x2, '_forced:export_magerr(,)'] 
     # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
@@ -135,3 +135,12 @@
     Datatype:     flag
     Lambda:       'lambda x, y: not (x or y)'
     RPN:          [x1, x2,'or', 'not']
+-
+    NativeInputs: [detect_isprimary]
+    DPDDname:     isPrimary
+    Datatype:     flag
+-
+    NativeInputs: ['{BAND}_base_SdssShape_psf_xx', '{BAND}_base_SdssShape_psf_yy','{BAND}_base_SdssShape_psf_xy']
+    DPDDname:     'psf_fwhm_{BAND}'
+    Lambda:       'lambda xx, yy, xy: pixel_scale * 2.355 * (xx * yy - xy * xy) ** 0.25'
+    RPN:          ['0.25', x3, x3, '*', x1, x2, '*', '-', '^', '2.355', '*', '{PIXEL_SCALE}', '*']

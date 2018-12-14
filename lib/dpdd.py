@@ -51,7 +51,7 @@ class DpddView(object):
     """
     def __init__(self, dbschema, tables=['position', 'dpdd_ref', 'dpdd_forced'],
                  bands=['g','i','r','u','y','z'], 
-                 yaml_path='native_to_dpdd.yaml',
+                 yaml_path='native_to_dpdd.yaml', pixel_scale=0.2,
                  yaml_override=None, dm_schema_version=3):
         self.dbschema = dbschema
         self.tables = tables
@@ -59,6 +59,7 @@ class DpddView(object):
         self.yaml_override = yaml_override
         self.dm_schema_version = dm_schema_version
         self.bands = bands
+        self.pixel_scale=pixel_scale
         self.ERR = 'err'
         self.FLUX = 'instflux'
         if dm_schema_version not in (1,2,3):
@@ -85,6 +86,7 @@ class DpddView(object):
     def rpn_value(inputs, rpn):
         argstack = []
         varpat = re.compile('x(\d+)$')
+        subspat = re.compile(r'\{[a-zA-Z_]*\}$')
         funcpat = re.compile('([a-zA-Z_]+[:a-zA-Z0-9_.]*)\(\)$')
         func2pat = re.compile('([a-zA-Z_]+[:a-zA-Z0-9_.]*)\(,\)$')
         for elt in rpn:
@@ -103,7 +105,11 @@ class DpddView(object):
                 # push onto stack
                 argstack.append(inputs[i - 1])
                 continue
-            if str(elt) in ['*', '+', '-', '/', '|', '%', '&', 'or', 'and']:
+            m = subspat.match(str(elt))
+            if m:
+                argstack.append(elt)
+                continue
+            if str(elt) in ['*', '+', '-', '/', '^', '|', '%', '&', 'or', 'and']:
                 res = '({} {} {})'.format(argstack.pop(),elt,argstack.pop())
                 argstack.append(res)
                 continue
@@ -148,6 +154,7 @@ class DpddView(object):
         asv = '{} AS {}'.format(value, item_dict['DPDDname'])
         FLUX = self.FLUX
         ERR = self.ERR
+        PIXEL_SCALE = self.pixel_scale
         BAND = '{BAND}'
         asv = asv.format(**locals())
         asvl = []

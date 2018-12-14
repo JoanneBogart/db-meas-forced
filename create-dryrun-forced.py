@@ -49,14 +49,19 @@ def main():
         fromfile_prefix_chars='@',
         description='Read a rerun directory to create "forced" summary table.')
 
-    parser.add_argument('rerunDir', help="Rerun directory from which to read data")
-    parser.add_argument('schemaName', help="DB schema name in which to load data")
-
-    parser.add_argument("--table-name", default="forced", help="Top-level table's name")
-    parser.add_argument("--table-space", default="", help="DB table space for tables")
-    parser.add_argument("--index-space", default="", help="DB table space for indexes")
-    parser.add_argument("--db-server", metavar="key=value", nargs="+", action="append", help="DB to connect to. This option must come later than non-optional arguments.")
-
+    parser.add_argument('rerunDir', 
+                        help="Rerun directory from which to read data")
+    parser.add_argument('schemaName', 
+                        help="DB schema name in which to load data")
+    parser.add_argument("--table-name", default="forced", 
+                        help="Top-level table's name")
+    parser.add_argument("--table-space", default="", 
+                        help="DB table space for tables")
+    parser.add_argument("--index-space", default="", 
+                        help="DB table space for indexes")
+    parser.add_argument("--db-server", metavar="key=value", nargs="+", 
+                        action="append", 
+                        help="DB connect parms. Must come after reqd args.")
     parser.add_argument("--with-skymap-wcs", action="store",
         help="""Use skymap_wcs at the specified path instead of calexp-*.fits.
             To generate skymap_wcs, run 'generate-skymap_wcs.py skyMap.pickle'
@@ -72,15 +77,13 @@ def main():
     parser.add_argument('--no-insert', dest='no_insert', action='store_true',
                         help="Just create tables and views; no inserts", 
                         default=False)
-    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', help="If supplied, ingest data for specified tracts only. Otherwise ingest all")
+    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', 
+                        help="Ingest data for specified tracts only if present. Else ingest all")
     args = parser.parse_args()
 
     if args.tracts is not None:
         print("Processing the following tracts:")
         for t in args.tracts: print(t)
-
-    #   temp for debugging
-    #   return
 
     if args.db_server:
         lib.config.dbServer.update(keyvalue.split('=', 1) for keyvalue in itertools.chain.from_iterable(args.db_server))
@@ -108,7 +111,6 @@ def main():
                                     args.table_name, filters, args.dryrun,
                                     tracts)
 
-
 def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
                                      filters, dryrun):
     """
@@ -123,17 +125,30 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
         List of filter names
     """
     bNeedCreating = False
+    bNeedView = False
 
     db = lib.common.new_db_connection()
 
     with db.cursor() as cursor:
-        # In case no views were created, modify this test to use a table
         try:
             cursor.execute('SELECT 0 FROM "{schemaName}"."position" WHERE FALSE;'.format(**locals()))
         except psycopg2.ProgrammingError:
             bNeedCreating = True
             db.rollback()
 
+    # Now check for view
+    with db.cursor() as cursor:
+        try:
+            cursor.execute('SELECT 0 FROM "{schemaName}"."dpdd" WHERE FALSE;'.format(**locals()))
+        except psycopg2.ProgrammingError:
+            bNeedView = True
+            db.rollback()
+
+    if bNeedView:
+        print("view needs creating")
+    else:
+        print("View is already there")
+        
     create_schema_string = 'CREATE SCHEMA IF NOT EXISTS "{schemaName}"'.format(**locals())
     dm_schema = 1
     if (not dryrun):
@@ -145,8 +160,21 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
                 create_view(cursor, schemaName, dm_schema)
             db.commit()
         else:
-            db.close()
-            drop_index_from_mastertable(rerunDir, schemaName, filters)
+            if bNeedView:
+                tract, patch, filter = get_an_existing_catalog_id(rerunDir, 
+                                                                  schemaName)
+                refPath = get_ref_path(rerunDir, tract, patch)
+                universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
+                if dm_schema is None:
+                    print("Cannot determine dm schema. Bailing..")
+                    return
+
+                with db.cursor() as cursor:
+                    create_view(cursor, schemaName, dm_schema)
+                db.commit()
+            else:
+                db.close()
+                drop_index_from_mastertable(rerunDir, schemaName, filters)
     else:
         if bNeedCreating:
             print("Would execute: ")
@@ -165,9 +193,7 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             create_view(cursor, schemaName, dm_schema)
 def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     """
-    Create the master table.
-    The master table will actually be a view, which JOINs (not UNIONs) child tables.
-    The child tables will also be created during a call to this function.
+    Create the tables
 
     This function only creates these tables. It does not insert data into them.
 
@@ -204,163 +230,23 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     for table in itertools.chain(universals.values(), multibands.values()):
         table.create(cursor, schemaName)
 
-    #  Make a view for dpdd
-    # yaml_path = os.path.join(os.getenv('DPDD_YAML'),'native_to_dpdd.yaml')
-    # yaml_override = os.path.join(os.getenv('DPDD_YAML'),
-    #                              'postgres_override.yaml')
-    # view_builder = DpddView(schemaName, yaml_path=yaml_path,
-    #                         yaml_override=yaml_override,
-    #                         dm_schema_version=int(dm_schema))
-    # vs = view_builder.view_string()
-    # if cursor:
-    #     cursor.execute(vs)
-    # else:
-    #     print("Create view command would be:")
-    #     print(vs)
-                            
     return dm_schema
 
-    #  OMIT FOR NOW -- no old-style views
+    #  OMIT old view code,including table comment. We have no old-style views
 
-
-    # Create master table
-    # commentOnTable = textwrap.dedent("""
-    # The summary table of forced photometry on coadd images.
-    # </p><p>Fluxes are in CGS units, and positions are in sky coordinates.
-    # Shapes and ellipticities are re-projected into the planes tangent
-    # to the celestial sphere at the objects' own positions  (the first
-    # axis parallels RA, the second axis DEC; the coordinates in the tangent
-    # planes are flipped compared to coadd images).
-    # </p><p>This table is a part of the whole summary table, which has been split
-    # into parts due to PostgreSQL's technical limit of the number of columns permitted
-    # in a table. To get columns in two or more parts of the whole summary table, join
-    # the parts together:
-    # </p><pre>
-    #   SELECT ... FROM
-    #     {schemaName}.forced
-    #     LEFT JOIN {schemaName}.forced2 USING (object_id)
-    #     LEFT JOIN {schemaName}.forced3 USING (object_id)
-    #     ...
-    # </pre><p>Use 'LEFT JOIN' instead of 'JOIN' and place the plain 'forced'
-    # (the one without suffix) at the first position in order for PostgreSQL to optimize the query.
-    # </p><p>The following search functions are available in where-clauses:</p><dl>
-    #   <dt><b>coneSearch</b>(coord, RA[deg], DEC[deg], RADIUS[arcsec]) -> boolean</dt>
-    #   <dd>This function returns True if <code>coord</code> is within a circle at (RA, DEC) with its radius RADIUS.</dd>
-    #   <dt><b>boxSearch</b>(coord, RA1, RA2, DEC1, DEC2) -> boolean</dt>
-    #   <dd>This function returns True if <code>coord</code> is within a box [RA1, RA2] x [DEC1, DEC2] (Units are degrees).
-    #     Note that <code>boxSearch(coord, 350, 370, DEC1, DEC2)</code> is different from <code>boxSearch(coord, 350, 10, DEC1, DEC2).</code>
-    #     In the former, ra \in [350, 360] U [0, 10]; while in the latter, ra \in [10, 350].</dd>
-    #   <dt><b>tractSearch</b>(object_id, TRACT) -> boolean</dt>
-    #   <dd>This function returns True if tract = TRACT.</dd>
-    #   <dt><b>tractSearch</b>(object_id, TRACT1, TRACT2) -> boolean</dt>
-    #   <dd>This function returns True if tract \in [TRACT1, TRACT2].</dd>
-    # </dl><p>
-    # Use of these functions will significantly speed up your query.
-    # </p><p>
-    # Field search functions are also available in where-clauses. They are used like:
-    # <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND detect_isprimary;</code>
-    # (#### is a field name) To get the full list of field search functions, say help() to the database server:
-    # <code>SELECT * FROM help('{schemaName}.search_%');</code>
-    # """).strip().format(**locals())
-
-    # Because the number of columns exceeds PostgreSQL's limit,
-    # we divide the master table into "forced", "forced2", "forced3", ...
-
-    # START COMMENTING OUT VIEW STUFF HERE
-    # listUniversals = [universals]
-    # listMultibands = [multibands]
-    # listMultibands.append(multibands.pop_many([
-    #     '_forced:part2',
-    # ]))
-    # listMultibands.append(multibands.pop_many([
-    #     '_forced:part3',
-    # ]))
-    # (major, minor, sim_type) = extract_schema_fields(schemaName)
-    # if major == None or (str(major) == '1' and str(minor) == '1'):
-    #     pass
-    # else:
-    #     listMultibands.append(multibands.pop_many([
-    #         '_forced:part4',
-    #     ]))
-
-    # for iPart, (universals, multibands) in enumerate(
-    #     itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
-    #     start=1
-    # ):
-    #     dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
-    #     if len(dbTables) > 1:
-    #         dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
-    #             'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
-    #             for table in dbTables[1:]
-    #         ]
-    #         dbTables = """
-    #         """.join(dbTables)
-    #     else:
-    #         dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
-
-    #     fieldDefs = []
-    #     for table in universals.values():
-    #         fieldDefs += table.get_exported_fields("")
-
-    #     for filter in filters:
-    #         for table in multibands.values():
-    #             fieldDefs += table.get_exported_fields(filter)
-
-    #     fieldDefs.insert(0, ("object_id", "object_id", "",
-    #         "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
-    #     ))
-
-    #     sFieldDefs = """,
-    #     """.join(
-    #         '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
-    #     )
-
-    #     tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
-
-    #     view_string = """
-    #     CREATE VIEW "{schemaName}"."{tableName}" AS (
-    #         SELECT
-    #             {sFieldDefs}
-    #         FROM
-    #             {dbTables}
-    #     )
-    #     """.format(**locals())
-        
-        # if cursor is not None:
-        #     cursor.execute(view_string)
-        # else:
-        #     print(view_string)
-
-        # for name, definition, unit, doc in fieldDefs:
-        #     field_string = """
-        #     COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
-        #     """.format(**locals())
-        #     arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
-            
-        #     fstype = type(field_string)
-        #     if fstype is not type('a'):
-        #         print("bad field string type ", fstype)
-        #         print('field_string is: ')
-        #         print(field_string)
-        #     if cursor is not None:
-        #         cursor.execute(field_string, arg_dict)
-        #     else:
-        #         print(field_string)
-        #         print(' to be bound with dict: ',arg_dict)
-
-        # table_comment="""
-        # COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
-        # """.format(**locals())
-        # arg_dict = dict(comment = commentOnTable)
-        
-        # if cursor is not None:
-        #     cursor.execute(table_comment, arg_dict)
-        # else:
-        #     print(table_comment)
-        #     print(' to be bound with dict: ',arg_dict)
 
 def create_view(cursor, schemaName, dm_schema):
-    #  Make a view for dpdd
+    """
+    Creates dpdd view.
+    @param cursor
+       cursor for writing to db.  If None, just print
+    @param schemaName
+       Name of schema in which to locate the view
+    @param dm_schema
+       dm table schema version used to produce the data.  Naming conventions
+       for native quantities vary somewhat depending on this version
+
+    """
     yaml_path = os.path.join(os.getenv('DPDD_YAML'),'native_to_dpdd.yaml')
     yaml_override = os.path.join(os.getenv('DPDD_YAML'),
                                  'postgres_override.yaml')
@@ -378,8 +264,7 @@ def create_view(cursor, schemaName, dm_schema):
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
                             dryrun, tracts):
     """
-    Insert data into the master table.
-    The data will actually flow not into the master table but into its children.
+    Insert data into tables.
     @param rerunDir
         Path to the rerun directory from which to generate the master table
     @param schemaName
@@ -405,9 +290,6 @@ def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
     for tract in our_tracts:
         for patch in get_existing_patches(rerunDir, tract):
             insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun)
-
-            #  temp for debugging:  stop after first patch
-            # if dryrun:  return
 
 def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun):
     """
@@ -603,9 +485,7 @@ def get_ref_schema_from_file(path):
         * "dm_schema_version" Value of 'AFW_TABLE_VERSION' keyword
     """
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
-    #with  open('original_ref_fields.txt', 'w') as f:
-    #    for fld in table.fields:
-    #        print(fld, file=f)
+
     dm_schema_version = table.dm_schema_version()
 
     # All fields starting with 'id' are removed from source table 'table'
@@ -617,10 +497,6 @@ def get_ref_schema_from_file(path):
         (name, algoclass(table))
         for name, algoclass in lib.forced_algos.ref_algos.items()
     )
-
-    #for name, algoclass in lib.forced_algos.ref_algos.items():
-    #    if 'ConvolvedFlux_seeing' in name:
-    #        print('name is ', name, ' and algoclass is ', str(algoclass))
 
     coord = algos["ref_coord"].coord
 
@@ -822,7 +698,6 @@ def get_catalog_schema_from_file(path, object_id):
         PoppingOrderedDict mapping name: str -> table: DBTable.
     """
 
-    #print("getting catalog schema")
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
 
     these_object_id = table.cutout_subtable("id").fields["id"].data
@@ -951,11 +826,9 @@ def get_an_existing_catalog_id(rerunDir, schemaName):
     pattern = get_catalog_path(rerunDir, "*", "*", "*", False, schemaName)
 
     for catPath in itertools.chain(glob.iglob(pattern), glob.iglob(pattern + ".gz")):
-        #print('catPath is: ', catPath)
         tract, patch, filter = lib.common.path_decompose(catPath)
-        #print('tract={tract}, patch={patch}, filter={filter}'.format(**locals()))
+
         refPath = get_ref_path(rerunDir, tract, patch)
-        #print('refPath is {refPath}'.format(**locals()))
         if lib.common.path_exists(refPath):
             return tract, patch, filter
 
@@ -994,9 +867,10 @@ def is_patch_already_inserted(cursor, schemaName, tract, patch, filters):
 
     if cursor is None:  return False
 
-    # The files that need registering include a "ref" file as well as multiband files.
-    # We address this problem by giving filter ID 0  (or file_id minFileId) to the "ref" file,
-    # and letting actual filter IDs start with 1.
+    # The files that need registering include a "ref" file as well as 
+    # multiband files.
+    # We address this problem by giving filter ID 0  (or file_id minFileId) 
+    # to the "ref" file, and letting actual filter IDs start with 1.
     fileId = [minFileId] + sorted(patchId*100 + lib.common.filterOrder[f]+1 for f in filters)
 
     cursor.execute("""
