@@ -79,20 +79,19 @@
     Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
     RPN: [x1, '_forced:export_mag()']
     # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
-
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}', 
                    '{BAND}_modelfit_CModel_{FLUX}{ERR}']
     DPDDname: 'magerr_{BAND}_cModel'
     Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
-    RPN: [x1, x2, '_forced:export_magerr(,)'] 
+    RPN: [x2, x1, '_forced:export_magerr(,)'] 
     # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}',
                    '{BAND}_modelfit_Cmodel_{FLUX}{ERR}']
     DPDDname: 'snr_{BAND}_cModel'
     Lamda:  'lambda x,y: np.divide(x,y)' 
-    RPN:      [x1,x2,'/']
+    RPN:      [x2,x1,'/']
 - 
     NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
     DPDDname: 'psFlux_{BAND}'
@@ -102,6 +101,16 @@
 -
     NativeInputs: ['{BAND}_base_psfFlux_{FLUX}{ERR}']
     DPDDname: 'psFluxErr_{BAND}'
+- 
+    NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
+    DPDDname: 'mag_{BAND}'
+    Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
+    RPN: [x1, '_forced:export_mag()']
+- 
+    NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}', '{BAND}_base_PsfFlux_{FLUX}{ERR}' ]
+    DPDDname: 'magerr_{BAND}'
+    Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
+    RPN: [x2, x1, '_forced:export_magerr(,)'] 
 -
     NativeInputs: ['{BAND}_base_SdssShape_flag']
     DPDDname: 'I_flag_{BAND}'
@@ -124,21 +133,21 @@
     NativeInputs: ['{BAND}_base_SdssShape_psf_xy']
     DPDDname: 'IxyPSF_{BAND}'
 -
-    NativeInputs: [base_PixelFlags_flag]
+    NativeInputs: [base_PixelFlags_flag_edge,base_PixelFlags_flag_interpolatedCenter,base_PixelFlags_flag_saturatedCenter,base_PixelFlags_flag_crCenter,base_PixelFlags_flag_bad,base_PixelFlags_flag_suspectCenter,base_PixelFlags_flag_clipped]
     DPDDname:     good
     Datatype:     flag
-    Lambda:       'lambda x: not x'
-    RPN:          [x1, 'not']
+    #Lambda:       'lambda x: not x'
+    RPN:          [x1, x2, 'or', x3, 'or', x4, 'or', x5, 'or', x6, 'or', x7, 'or', 'not']
 -
-    NativeInputs: [base_PixelFlags_flag, deblend_skipped]
+    NativeInputs: [base_PixelFlags_flag_edge,base_PixelFlags_flag_interpolatedCenter,base_PixelFlags_flag_saturatedCenter,base_PixelFlags_flag_crCenter,base_PixelFlags_flag_bad,base_PixelFlags_flag_suspectCenter,base_PixelFlags_flag_clipped, deblend_skipped]
     DPDDname:     clean
     Datatype:     flag
-    Lambda:       'lambda x, y: not (x or y)'
-    RPN:          [x1, x2,'or', 'not']
--
-    NativeInputs: [detect_isprimary]
-    DPDDname:     isPrimary
-    Datatype:     flag
+    #Lambda:       'lambda x, y: not (x or y)'
+    RPN:          [x1, x2, 'or', x3, 'or', x4, 'or', x5, 'or', x6, 'or', x7, 'or', x8, 'or', 'not']
+#-
+#    NativeInputs: [detect_isprimary]
+#    DPDDname:     isPrimary
+#    Datatype:     flag
 -
     NativeInputs: ['{BAND}_base_SdssShape_psf_xx', '{BAND}_base_SdssShape_psf_yy','{BAND}_base_SdssShape_psf_xy']
     DPDDname:     'psf_fwhm_{BAND}'

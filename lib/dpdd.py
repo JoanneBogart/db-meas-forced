@@ -205,6 +205,7 @@ class DpddView(object):
                    {sFields}
              FROM
                    {table_spec}
+             WHERE {dbschema}.position.detect_isprimary
            )
         """.format(**locals())
         return cv
