@@ -1,11 +1,16 @@
 # Each dict in in the list below may have the following keys:
-# NativeInputs  (requried) - a list of column names as they appear in Fits headers except that
-#     certain substitutions may be specified by using substrings {BAND}, {FLUX}, {ERR}
-#     Code interpreting the YAML should substitute for FLUX and ERR as appropriate,
-#     depending on stack version
+# NativeInputs  (required) - a list of column names as they appear in Fits headers
+#     except that certain substitutions may be specified by using substrings {BAND},
+#     {FLUX}, {ERR}. Code interpreting the YAML should substitute for FLUX and ERR
+#     as appropriate, depending on schema version of fits files.
 # DPDDname (required)   Output name.  Supports same substitutions as NativeInputs
 # Datatype (optional)   May be any of int, long, double, float, flag.  Defaults to float
-# Lambda (optional)   String repre    
+# Lambda (optional)   String representing expression needed to compute dpdd quantity
+# RPN (optional) RPN-like representation of how to compute dpdd quantity.
+# When neither Lambda nor RPN is present, output is just set to value of input (should
+#      be only one item in the list)
+#
+# See also the file postgres_override.yaml
 - 
     NativeInputs:   [id]
     Datatype: long
