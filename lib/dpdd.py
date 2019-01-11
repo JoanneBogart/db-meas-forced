@@ -221,7 +221,7 @@ if __name__ =='__main__':
 
     view = DpddView('run12p_native', yaml_path = yaml_file, 
                     yaml_override = override_file,
-                    dm_schema_version = 1)
+                    dm_schema_version = 3)
 
     cv = view.view_string()
 

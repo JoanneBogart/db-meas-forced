@@ -1,14 +1,14 @@
 # Each dict in in the list below may have the following keys:
-# NativeInputs  (required) - a list of column names as they appear in Fits headers
-#     except that certain substitutions may be specified by using substrings {BAND},
-#     {FLUX}, {ERR}. Code interpreting the YAML should substitute for FLUX and ERR
-#     as appropriate, depending on schema version of fits files.
-# DPDDname (required)   Output name.  Supports same substitutions as NativeInputs
-# Datatype (optional)   May be any of int, long, double, float, flag.  Defaults to float
-# Lambda (optional)   String representing expression needed to compute dpdd quantity
+# NativeInputs  (required) - list of column names as they appear in Fits headers
+#     except that certain substitutions may be specified by using substrings 
+#     {BAND}, {FLUX}, {ERR}. Code interpreting the YAML should substitute for
+#     FLUX and ERR as appropriate, depending on schema version of fits files.
+# DPDDname (required)   Output name.  Supports substitutions like NativeInputs
+# Datatype (optional)   May be any of int, long, double, float (default), flag.
+# Lambda (optional)   Expression (as string) needed to compute dpdd quantity
 # RPN (optional) RPN-like representation of how to compute dpdd quantity.
-# When neither Lambda nor RPN is present, output is just set to value of input (should
-#      be only one item in the list)
+# When neither Lambda nor RPN is present, output is just set to value of input 
+#      (should be only one item in the list)
 #
 # See also the file postgres_override.yaml
 - 
@@ -82,15 +82,15 @@
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}']
     DPDDname: 'mag_{BAND}_cModel'
     Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
-    RPN: [x1, '_forced:export_mag()']
-    # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
+    RPN: [27.0,x1,'log()',-2.5, '*','+']
+    #RPN: [x1, '_forced:export_mag()']
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}', 
                    '{BAND}_modelfit_CModel_{FLUX}{ERR}']
     DPDDname: 'magerr_{BAND}_cModel'
     Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
-    RPN: [x2, x1, '_forced:export_magerr(,)'] 
-    # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
+    RPN: [x1,'log()',x1, '*', 2.5,x2,'*','/']
+    # RPN: [x2, x1, '_forced:export_magerr(,)'] 
 -
     NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}',
                    '{BAND}_modelfit_Cmodel_{FLUX}{ERR}']
@@ -110,12 +110,14 @@
     NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
     DPDDname: 'mag_{BAND}'
     Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
-    RPN: [x1, '_forced:export_mag()']
+    RPN: [27.0,x1,'log()',-2.5, '*','+']
+    #RPN: [x1, '_forced:export_mag()']
 - 
     NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}', '{BAND}_base_PsfFlux_{FLUX}{ERR}' ]
     DPDDname: 'magerr_{BAND}'
     Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
-    RPN: [x2, x1, '_forced:export_magerr(,)'] 
+    RPN: [x1,'log()',x1, '*', 2.5,x2,'*','/']
+    #RPN: [x2, x1, '_forced:export_magerr(,)'] 
 -
     NativeInputs: ['{BAND}_base_SdssShape_flag']
     DPDDname: 'I_flag_{BAND}'
@@ -149,10 +151,6 @@
     Datatype:     flag
     #Lambda:       'lambda x, y: not (x or y)'
     RPN:          [x1, x2, 'or', x3, 'or', x4, 'or', x5, 'or', x6, 'or', x7, 'or', x8, 'or', 'not']
-#-
-#    NativeInputs: [detect_isprimary]
-#    DPDDname:     isPrimary
-#    Datatype:     flag
 -
     NativeInputs: ['{BAND}_base_SdssShape_psf_xx', '{BAND}_base_SdssShape_psf_yy','{BAND}_base_SdssShape_psf_xy']
     DPDDname:     'psf_fwhm_{BAND}'

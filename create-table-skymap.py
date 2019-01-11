@@ -39,16 +39,23 @@ earth = 180.0*3600.0 / math.pi
 
 # The following parameters are common to all tracts
 # but different for hsc and lsst
+#  To obtain, load skymap. then do sky[any-index].getWcs().getPixelOrigin()
 #s_tract_crpix1 = '18000'     #  hsc value
 #s_tract_crpix2 = '18000'
-s_tract_crpix1 = '16000'      # lsst value
-s_tract_crpix2 = '16000'
+#s_tract_crpix1 = '16000'      # lsst value for old run12p
+#s_tract_crpix2 = '16000'
+s_tract_crpix1 = '14000'      # lsst value starting with run12i
+s_tract_crpix2 = '14000'
+
+#  To obtain, load skymap. then do sky[any-index].getWcs().getCdMatrix()
 #s_tract_cd1_1  = '-4.66666666666667E-05'    # hsc value
-s_tract_cd1_1  = '-5.13888888888923E-05'     # lsst value
+#s_tract_cd1_1  = '-5.13888888888923E-05'     # lsst value for old run12p
+s_tract_cd1_1  = '-5.55555555555556E-05'     # lsst value starting with run12i
 s_tract_cd1_2  = '0.                   '
 s_tract_cd2_1  = '0.                   '
 #s_tract_cd2_2  = '4.66666666666667E-05 '    # hsc vallue
-s_tract_cd2_2  = '5.13888888888923E-05'      # lsst value
+#s_tract_cd2_2  = '5.13888888888923E-05'      # lsst value for old run12p
+s_tract_cd2_2  = '5.55555555555556E-05'      # lsst value starting with run12i
 
 
 tract_crpix1 = int  (s_tract_crpix1)

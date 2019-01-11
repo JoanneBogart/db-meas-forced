@@ -15,3 +15,21 @@
   Datatype: double
   DPDDname: dec
   RPN: [x1, 'public.coord_to_dec()']
+-
+  NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}']
+  DPDDname: 'mag_{BAND}_cModel'
+  RPN: [x1, '_forced:export_mag()']
+-
+  NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}',
+                 '{BAND}_modelfit_CModel_{FLUX}{ERR}']
+  DPDDname: 'magerr_{BAND}_cModel'
+  RPN: [x2, x1, '_forced:export_magerr(,)']
+  # RPN: [2.5,x2,'*',x1,'log()',x1,'*','/']
+-
+  NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
+  DPDDname: 'mag_{BAND}'
+  RPN: [x1, '_forced:export_mag()']
+-
+  NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}', '{BAND}_base_PsfFlux_{FLUX}{ERR}' ]
+  DPDDname: 'magerr_{BAND}'
+  RPN: [x2, x1, '_forced:export_magerr(,)']
