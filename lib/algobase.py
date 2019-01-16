@@ -239,7 +239,11 @@ class Algo(object):
                 "ra:" "default_ra", "dec": "default_dec"
             in positionerrs, shapes, etc.
         """
+
+        #  Almost everything is commented out. See _AlgoTransformer.transform()
+        #  below.
         _AlgoTransformer(self, rerunDir, tract, patch, filter, coord).transform()
+        return
 
     def get_backend_fields(self, prefix):
         """
@@ -261,6 +265,7 @@ class Algo(object):
         Get field data for the backend table.
         @param prefix (str)
             This prefix will be prefixed to field names.
+            Typical use is <filtername>_, e.g. 'g_'
         @return list of (fieldname, printf_format, [column]).
             'column' is a numpy.array. An example of the return value is:
             ("i_point", "(%.16e,%.16e)", [x, y]),
@@ -278,6 +283,7 @@ class Algo(object):
         Get field data for the frontend view.
         @param prefix (str)
             This prefix will be prefixed to field names.
+            Typical use is <filtername>_, e.g. 'g_'
         @return list of (fieldname, definition, unit, document).
             Each field can be exported as:
                 {definition} AS {fieldname}.
@@ -318,19 +324,23 @@ class Algo(object):
     def _get_renamed_name(cls, nameInSourceTable):
         """
         Apply renamerules to the given name.
+        No, don't we're not doing any renaing
+
         @param nameInSourceTable (str)
         @return (str):
             Renamed name.
         """
-        class TempAlgo(Algo):
-            renamerules = cls.renamerules
-            def __init__(self, name):
-                fields = PoppingOrderedDict([("", sourcetable.Field(name, None, None, None, None))])
-                self.sourceTable = sourcetable.SourceTable(fields, None, None)
+        return nameInSourceTable
 
-        algoobj = TempAlgo(nameInSourceTable)
-        _AlgoTransformer(algoobj, None, None, None, None, None)._rename()
-        return algoobj.sourceTable.fields[""].name
+        # class TempAlgo(Algo):
+        #     renamerules = cls.renamerules
+        #     def __init__(self, name):
+        #         fields = PoppingOrderedDict([("", sourcetable.Field(name, None, None, None, None))])
+        #         self.sourceTable = sourcetable.SourceTable(fields, None, None)
+
+        # algoobj = TempAlgo(nameInSourceTable)
+        # _AlgoTransformer(algoobj, None, None, None, None, None)._rename()
+        # return algoobj.sourceTable.fields[""].name
 
 
 class _AlgoTransformer(object):
@@ -373,18 +383,19 @@ class _AlgoTransformer(object):
     def transform(self):
         """
         Do transformations
+        For native DC2 data skip everything but _to_singleprecision( )
         """
-        self._transform_positions()
-        self._transform_positionerrs()
-        self._transform_positionsigmas()
-        self._transform_sizes()
-        self._transform_shapes()
-        self._transform_shapeerrs()
-        self._transform_shapesigmas()
-        self._transform_ellipticities()
-        self._transform_angles()
+        #self._transform_positions()
+        #self._transform_positionerrs()
+        #self._transform_positionsigmas()
+        #self._transform_sizes()
+        #self._transform_shapes()
+        #self._transform_shapeerrs()
+        #self._transform_shapesigmas()
+        #self._transform_ellipticities()
+        #self._transform_angles()
         self._to_singleprecision()
-        self._rename()
+        #self._rename()
 
     def _transform_positions(self):
         for desc in self.algoclass.positions:

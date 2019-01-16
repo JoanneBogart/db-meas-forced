@@ -27,6 +27,7 @@ import lib.sourcetable
 import lib.common
 import lib.config
 from lib.misc import PoppingOrderedDict
+from lib.dpdd import DpddView
 
 if lib.config.MULTICORE:
     from lib import pipe_printf
@@ -48,14 +49,19 @@ def main():
         fromfile_prefix_chars='@',
         description='Read a rerun directory to create "forced" summary table.')
 
-    parser.add_argument('rerunDir', help="Rerun directory from which to read data")
-    parser.add_argument('schemaName', help="DB schema name in which to load data")
-
-    parser.add_argument("--table-name", default="forced", help="Top-level table's name")
-    parser.add_argument("--table-space", default="", help="DB table space for tables")
-    parser.add_argument("--index-space", default="", help="DB table space for indexes")
-    parser.add_argument("--db-server", metavar="key=value", nargs="+", action="append", help="DB to connect to. This option must come later than non-optional arguments.")
-
+    parser.add_argument('rerunDir', 
+                        help="Rerun directory from which to read data")
+    parser.add_argument('schemaName', 
+                        help="DB schema name in which to load data")
+    parser.add_argument("--table-name", default="forced", 
+                        help="Top-level table's name")
+    parser.add_argument("--table-space", default="", 
+                        help="DB table space for tables")
+    parser.add_argument("--index-space", default="", 
+                        help="DB table space for indexes")
+    parser.add_argument("--db-server", metavar="key=value", nargs="+", 
+                        action="append", 
+                        help="DB connect parms. Must come after reqd args.")
     parser.add_argument("--with-skymap-wcs", action="store",
         help="""Use skymap_wcs at the specified path instead of calexp-*.fits.
             To generate skymap_wcs, run 'generate-skymap_wcs.py skyMap.pickle'
@@ -71,15 +77,15 @@ def main():
     parser.add_argument('--no-insert', dest='no_insert', action='store_true',
                         help="Just create tables and views; no inserts", 
                         default=False)
-    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', help="If supplied, ingest data for specified tracts only. Otherwise ingest all")
+    parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', 
+                        help="Ingest data for specified tracts only if present. Else ingest all")
+    parser.add_argument('--imageRerunDir', default=None, 
+                        help="Root dir for finding images; defaults to rerunDir")
     args = parser.parse_args()
 
     if args.tracts is not None:
         print("Processing the following tracts:")
         for t in args.tracts: print(t)
-
-    #   temp for debugging
-    #   return
 
     if args.db_server:
         lib.config.dbServer.update(keyvalue.split('=', 1) for keyvalue in itertools.chain.from_iterable(args.db_server))
@@ -94,7 +100,8 @@ def main():
     else:
         print("Invoking create_mastertable_if_not_exists")
         create_mastertable_if_not_exists(args.rerunDir, args.schemaName, 
-                                         args.table_name, filters, args.dryrun)
+                                         args.table_name, filters, args.dryrun,
+                                         args.imageRerunDir)
         sys.stdout.flush()
         sys.stderr.flush()
         if args.tracts: 
@@ -107,9 +114,8 @@ def main():
                                     args.table_name, filters, args.dryrun,
                                     tracts)
 
-
 def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
-                                     filters, dryrun):
+                                     filters, dryrun, imageRerunDir):
     """
     Create the master table if it does not exist.
     @param rerunDir
@@ -122,40 +128,79 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
         List of filter names
     """
     bNeedCreating = False
+    bNeedView = False
 
     db = lib.common.new_db_connection()
 
     with db.cursor() as cursor:
         try:
-            cursor.execute('SELECT 0 FROM "{schemaName}"."{masterTableName}" WHERE FALSE;'.format(**locals()))
+            cursor.execute('SELECT 0 FROM "{schemaName}"."position" WHERE FALSE;'.format(**locals()))
         except psycopg2.ProgrammingError:
             bNeedCreating = True
             db.rollback()
 
+    # Now check for view
+    with db.cursor() as cursor:
+        try:
+            cursor.execute('SELECT 0 FROM "{schemaName}"."dpdd" WHERE FALSE;'.format(**locals()))
+        except psycopg2.ProgrammingError:
+            bNeedView = True
+            db.rollback()
+
+    if bNeedView:
+        print("view needs creating")
+    else:
+        print("View is already there")
+        
     create_schema_string = 'CREATE SCHEMA IF NOT EXISTS "{schemaName}"'.format(**locals())
+    dm_schema = 1
     if (not dryrun):
         if bNeedCreating:
             with db.cursor() as cursor:
                 cursor.execute(create_schema_string)
-                create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters)
+                dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                               masterTableName, filters,
+                                               imageRerunDir)
+                create_view(cursor, schemaName, dm_schema)
             db.commit()
         else:
-            db.close()
-            drop_index_from_mastertable(rerunDir, schemaName, filters)
+            if bNeedView:
+                tract, patch, filter = get_an_existing_catalog_id(rerunDir, 
+                                                                  schemaName)
+                refPath = get_ref_path(rerunDir, tract, patch)
+                universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
+                if dm_schema is None:
+                    print("Cannot determine dm schema. Bailing..")
+                    return
+
+                with db.cursor() as cursor:
+                    create_view(cursor, schemaName, dm_schema)
+                db.commit()
+            else:
+                db.close()
+                drop_index_from_mastertable(rerunDir, schemaName, filters)
     else:
         if bNeedCreating:
             print("Would execute: ")
             print(create_schema_string)
             cursor = None
-            create_mastertable(cursor, rerunDir, schemaName, masterTableName, 
-                               filters)
+            dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                           masterTableName, filters, 
+                                           imageRerunDir)
+            create_view(cursor, schemaName, dm_schema)
         else:
             print("Master table already exists")
-def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
+            print("pretend create anyway:")
+            print(create_schema_string)
+            cursor = None
+            dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
+                                           masterTableName, filters, 
+                                           imageRerunDir)
+            create_view(cursor, schemaName, dm_schema)
+def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters,
+                       imageRerunDir):
     """
-    Create the master table.
-    The master table will actually be a view, which JOINs (not UNIONs) child tables.
-    The child tables will also be created during a call to this function.
+    Create the tables
 
     This function only creates these tables. It does not insert data into them.
 
@@ -171,167 +216,63 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
         List of filter names
     """
 
+    if imageRerunDir == None: imageRerunDir = rerunDir
     tract, patch, filter = get_an_existing_catalog_id(rerunDir, schemaName)
     catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
                                schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
+    if dm_schema is None: dm_schema = 1
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
         table.set_filters(filters)
 
     for table in itertools.chain(universals.values(), multibands.values()):
-        if ('position' in table.name):
-            print("About to transform table ", table.name)
-        table.transform(rerunDir, tract, patch, filter, coord)
+        #if ('position' in table.name):
+        #    print("About to transform table ", table.name)
+        table.transform(imageRerunDir, tract, patch, filter, coord)
 
     # Create source tables
     for table in itertools.chain(universals.values(), multibands.values()):
         table.create(cursor, schemaName)
 
-    # Create master table
-    commentOnTable = textwrap.dedent("""
-    The summary table of forced photometry on coadd images.
-    </p><p>Fluxes are in CGS units, and positions are in sky coordinates.
-    Shapes and ellipticities are re-projected into the planes tangent
-    to the celestial sphere at the objects' own positions  (the first
-    axis parallels RA, the second axis DEC; the coordinates in the tangent
-    planes are flipped compared to coadd images).
-    </p><p>This table is a part of the whole summary table, which has been split
-    into parts due to PostgreSQL's technical limit of the number of columns permitted
-    in a table. To get columns in two or more parts of the whole summary table, join
-    the parts together:
-    </p><pre>
-      SELECT ... FROM
-        {schemaName}.forced
-        LEFT JOIN {schemaName}.forced2 USING (object_id)
-        LEFT JOIN {schemaName}.forced3 USING (object_id)
-        ...
-    </pre><p>Use 'LEFT JOIN' instead of 'JOIN' and place the plain 'forced'
-    (the one without suffix) at the first position in order for PostgreSQL to optimize the query.
-    </p><p>The following search functions are available in where-clauses:</p><dl>
-      <dt><b>coneSearch</b>(coord, RA[deg], DEC[deg], RADIUS[arcsec]) -> boolean</dt>
-      <dd>This function returns True if <code>coord</code> is within a circle at (RA, DEC) with its radius RADIUS.</dd>
-      <dt><b>boxSearch</b>(coord, RA1, RA2, DEC1, DEC2) -> boolean</dt>
-      <dd>This function returns True if <code>coord</code> is within a box [RA1, RA2] x [DEC1, DEC2] (Units are degrees).
-        Note that <code>boxSearch(coord, 350, 370, DEC1, DEC2)</code> is different from <code>boxSearch(coord, 350, 10, DEC1, DEC2).</code>
-        In the former, ra \in [350, 360] U [0, 10]; while in the latter, ra \in [10, 350].</dd>
-      <dt><b>tractSearch</b>(object_id, TRACT) -> boolean</dt>
-      <dd>This function returns True if tract = TRACT.</dd>
-      <dt><b>tractSearch</b>(object_id, TRACT1, TRACT2) -> boolean</dt>
-      <dd>This function returns True if tract \in [TRACT1, TRACT2].</dd>
-    </dl><p>
-    Use of these functions will significantly speed up your query.
-    </p><p>
-    Field search functions are also available in where-clauses. They are used like:
-    <code>SELECT ... FROM {schemaName}.forced WHERE {schemaName}.search_####(object_id) AND isprimary;</code>
-    (#### is a field name) To get the full list of field search functions, say help() to the database server:
-    <code>SELECT * FROM help('{schemaName}.search_%');</code>
-    """).strip().format(**locals())
+    return dm_schema
 
-    # Because the number of columns exceeds PostgreSQL's limit,
-    # we divide the master table into "forced", "forced2", "forced3", ...
+    #  OMIT old view code,including table comment. We have no old-style views
 
-    listUniversals = [universals]
-    listMultibands = [multibands]
-    listMultibands.append(multibands.pop_many([
-        '_forced:part2',
-    ]))
-    listMultibands.append(multibands.pop_many([
-        '_forced:part3',
-    ]))
-    (major, minor, sim_type) = extract_schema_fields(schemaName)
-    if major == None or (str(major) == '1' and str(minor) == '1'):
-        pass
+
+def create_view(cursor, schemaName, dm_schema):
+    """
+    Creates dpdd view.
+    @param cursor
+       cursor for writing to db.  If None, just print
+    @param schemaName
+       Name of schema in which to locate the view
+    @param dm_schema
+       dm table schema version used to produce the data.  Naming conventions
+       for native quantities vary somewhat depending on this version
+
+    """
+    yaml_path = os.path.join(os.getenv('DPDD_YAML'),'native_to_dpdd.yaml')
+    yaml_override = os.path.join(os.getenv('DPDD_YAML'),
+                                 'postgres_override.yaml')
+    view_builder = DpddView(schemaName, yaml_path=yaml_path,
+                            yaml_override=yaml_override,
+                            dm_schema_version=int(dm_schema))
+    vs = view_builder.view_string()
+    if cursor:
+        cursor.execute(vs)
     else:
-        listMultibands.append(multibands.pop_many([
-            '_forced:part4',
-        ]))
-
-    for iPart, (universals, multibands) in enumerate(
-        itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
-        start=1
-    ):
-        dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
-        if len(dbTables) > 1:
-            dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
-                'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
-                for table in dbTables[1:]
-            ]
-            dbTables = """
-            """.join(dbTables)
-        else:
-            dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
-
-        fieldDefs = []
-        for table in universals.values():
-            fieldDefs += table.get_exported_fields("")
-
-        for filter in filters:
-            for table in multibands.values():
-                fieldDefs += table.get_exported_fields(filter)
-
-        fieldDefs.insert(0, ("object_id", "object_id", "",
-            "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
-        ))
-
-        sFieldDefs = """,
-        """.join(
-            '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
-        )
-
-        tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
-
-        view_string = """
-        CREATE VIEW "{schemaName}"."{tableName}" AS (
-            SELECT
-                {sFieldDefs}
-            FROM
-                {dbTables}
-        )
-        """.format(**locals())
-        
-        if cursor is not None:
-            cursor.execute(view_string)
-        else:
-            print(view_string)
-
-        for name, definition, unit, doc in fieldDefs:
-            field_string = """
-            COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
-            """.format(**locals())
-            arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
-            
-            fstype = type(field_string)
-            if fstype is not type('a'):
-                print("bad field string type ", fstype)
-                print('field_string is: ')
-                print(field_string)
-            if cursor is not None:
-                cursor.execute(field_string, arg_dict)
-            else:
-                print(field_string)
-                print(' to be bound with dict: ',arg_dict)
-
-        table_comment="""
-        COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
-        """.format(**locals())
-        arg_dict = dict(comment = commentOnTable)
-        
-        if cursor is not None:
-            cursor.execute(table_comment, arg_dict)
-        else:
-            print(table_comment)
-            print(' to be bound with dict: ',arg_dict)
+        print("Create view command would be:")
+        print(vs)
 
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
                             dryrun, tracts):
     """
-    Insert data into the master table.
-    The data will actually flow not into the master table but into its children.
+    Insert data into tables.
     @param rerunDir
         Path to the rerun directory from which to generate the master table
     @param schemaName
@@ -358,9 +299,6 @@ def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
         for patch in get_existing_patches(rerunDir, tract):
             insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun)
 
-            #  temp for debugging:  stop after first patch
-            # if dryrun:  return
-
 def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters, tract, patch, dryrun):
     """
     Insert a specific patch into the master table.
@@ -381,6 +319,7 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
         If True just print commands rather than executing
     """
     catPaths = {}
+
     for filter in filters:
         catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
                                    schemaName=schemaName)
@@ -398,7 +337,7 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
             use_cursor = None
 
         refPath = get_ref_path(rerunDir, tract, patch)
-        universals, object_id, coord = get_ref_schema_from_file(refPath)
+        universals,object_id,coord,dm_schema = get_ref_schema_from_file(refPath)
 
         for table in itertools.chain(universals.values()):
             table.transform(rerunDir, tract, patch, "", coord)
@@ -494,7 +433,7 @@ def create_index_on_mastertable(rerunDir, schemaName, filters):
                                schemaName=schemaName)
     refPath = get_ref_path    (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals, object_id, coord, dm_schema = get_ref_schema_from_file(refPath)
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
@@ -503,8 +442,14 @@ def create_index_on_mastertable(rerunDir, schemaName, filters):
     db = lib.common.new_db_connection()
     with db.cursor() as cursor:
         for table in itertools.chain(universals.values(), multibands.values()):
-            table.create_index(cursor, schemaName)
-    db.commit()
+            if ('position' in table.name):
+                table.set_dbconnection(db)
+                table.create_index(cursor, schemaName)
+                table.set_dbconnection(None)
+            else:
+                table.create_index(cursor, schemaName)
+                db.commit()
+    #db.commit()
 
 
 def drop_index_from_mastertable(rerunDir, schemaName, filters):
@@ -523,7 +468,7 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
                                schemaName=schemaName)
     refPath = get_ref_path   (rerunDir, tract, patch)
 
-    universals, object_id, coord = get_ref_schema_from_file(refPath)
+    universals, object_id, coord, dm_schema = get_ref_schema_from_file(refPath)
     multibands = get_catalog_schema_from_file(catPath, object_id)
 
     for table in itertools.chain(universals.values(), multibands.values()):
@@ -535,7 +480,6 @@ def drop_index_from_mastertable(rerunDir, schemaName, filters):
             table.drop_index(cursor, schemaName)
     db.commit()
 
-
 def get_ref_schema_from_file(path):
     """
     Get fields in a "ref-*.fits" file.
@@ -546,11 +490,11 @@ def get_ref_schema_from_file(path):
         * "object_id" is a numpy.array of object_id,
         * "coord" is {"ra": numpy.array, "dec": numpy.array},
             in which angles are in degrees.
+        * "dm_schema_version" Value of 'AFW_TABLE_VERSION' keyword
     """
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
-    #with  open('original_ref_fields.txt', 'w') as f:
-    #    for fld in table.fields:
-    #        print(fld, file=f)
+
+    dm_schema_version = table.dm_schema_version()
 
     # All fields starting with 'id' are removed from source table 'table'
     # and put in a new table.  In practice this table has a single column
@@ -561,9 +505,6 @@ def get_ref_schema_from_file(path):
         (name, algoclass(table))
         for name, algoclass in lib.forced_algos.ref_algos.items()
     )
-    #for name, algoclass in lib.forced_algos.ref_algos.items():
-    #    if 'ConvolvedFlux_seeing' in name:
-    #        print('name is ', name, ' and algoclass is ', str(algoclass))
 
     coord = algos["ref_coord"].coord
 
@@ -579,12 +520,42 @@ def get_ref_schema_from_file(path):
         lib.misc.warning('Ignored field: ', field, 'in', path)
 
     dbtables = PoppingOrderedDict()
-    def add(name, sourcenames, dbtable_class=lib.dbtable.DBTable_BandIndependent):
+    def add(name, sourcenames, 
+            dbtable_class=lib.dbtable.DBTable_BandIndependent):
         dbtables[name] = dbtable_class(name, algos.pop_many(sourcenames))
 
-    add("_forced:position", [
-        "ref_coord", "detect", "merge",
+    #   New table names:
+    #       position (= old _forced:position)
+    #       dpdd_ref (remaining quantitites from ref used in dpdd)
+    #       misc_ref  (everything else in ref)
+    #       dpdd_forced (multiband quantities in dpdd)
+    #       forced2
+    #       forced3
+    #       forced4
+    #       forced5
+    #   view dpdd will come from position join dpdd_ref join dpdd_forced
+
+    add("position", [
+        "ref_coord", "detect", "merge"
     ], dbtable_class=DBTable_Position)
+    add("dpdd_ref",
+        ["base_SdssCentroid", "base_PsfFlux","base_ClassificationExtendedness",
+         "base_Blendedness","base_PixelFlags", "ext_shapeHSM", 
+         "base_SdssShape", "modelfit_CModel", "deblend", ])
+    add("misc_ref",
+        ["base_CircularApertureFlux",
+         "base_FootprintArea",
+         "base_GaussianCentroid",
+         "base_GaussianFlux",
+         "base_InputCount",
+         "base_LocalBackground",
+         "base_NaiveCentroid",
+         "base_Variance",
+         "calib",
+         "ext_convolved_ConvolvedFlux",
+         "ext_photometryKron_KronFlux",
+         "footprint",
+         "modelfit_DoubleShapeletPsfApprox",])
 
     if algos:
         print("remaining algos:")
@@ -592,27 +563,34 @@ def get_ref_schema_from_file(path):
         for k in algos: print(str(k))
         raise RuntimeError("Algorithms remain unused; see above ")
 
-    return dbtables, object_id, coord
+    return dbtables, object_id, coord, dm_schema_version
 
-
+# Changes to accommodate leaving field 'parent' as is (no change to 'parent_id')
 class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
+    def __init__(self, name, algos):
+        super().__init__(name, algos)
+        self.dbconn = None
+
+    def set_dbconnection(self, dbconn):
+        self.dbconn = dbconn
+
     def create_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.create_index(self, cursor, schemaName)
-
         indexSpace = lib.config.get_index_space()
 
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_parent_id_idx"
         ON
             "{schemaName}"."{self.name}"
-            ( parent_id
+            ( parent
             )
         {indexSpace}
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_skymap_id_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -621,8 +599,9 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         {indexSpace}
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_coord_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -634,11 +613,11 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             coord IS NOT NULL
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
 
-        # indices WHERE isprimary = True
-
+        # indices WHERE detect_isprimary = True
         cursor.execute("""
-        CREATE UNIQUE INDEX
+        CREATE UNIQUE INDEX IF NOT EXISTS
             "{self.name}_object_id_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -646,11 +625,12 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             )
         {indexSpace}
         WHERE
-          isprimary
+          detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_skymap_id_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -658,11 +638,12 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             )
         {indexSpace}
         WHERE
-          isprimary
+          detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
         cursor.execute("""
-        CREATE INDEX
+        CREATE INDEX IF NOT EXISTS
             "{self.name}_coord_primary_idx"
         ON
             "{schemaName}"."{self.name}"
@@ -672,9 +653,10 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         {indexSpace}
         WHERE
             coord IS NOT NULL
-            AND isprimary
+            AND detect_isprimary
         """.format(**locals())
         )
+        if (self.dbconn): self.dbconn.commit()
 
     def drop_index(self, cursor, schemaName):
         lib.dbtable.DBTable_BandIndependent.drop_index(self, cursor, schemaName)
@@ -695,7 +677,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
         """.format(**locals())
         )
 
-        # indices WHERE isprimary = True
+        # indices WHERE detect_isprimary = True
 
         cursor.execute("""
         DROP INDEX IF EXISTS
@@ -724,7 +706,6 @@ def get_catalog_schema_from_file(path, object_id):
         PoppingOrderedDict mapping name: str -> table: DBTable.
     """
 
-    #print("getting catalog schema")
     table = lib.sourcetable.SourceTable.from_hdu(lib.fits.fits_open(path)[1])
 
     these_object_id = table.cutout_subtable("id").fields["id"].data
@@ -752,35 +733,42 @@ def get_catalog_schema_from_file(path, object_id):
     def add(name, sourcenames, dbtable_class=lib.dbtable.DBTable):
         dbtables[name] = dbtable_class(name, algos.pop_many(sourcenames))
 
-    add("_forced:part1", [
+    add("dpdd_forced", [
         "base_PixelFlags",
         "base_InputCount",
         "base_Variance",
         "base_LocalBackground",
         "base_ClassificationExtendedness",    # not in lsst 1.1 data
         "modelfit_CModel",
+        "base_SdssCentroid",
+        "base_SdssShape",
+        "base_PsfFlux",
     ])
 
-    add("_forced:part2", [
-        "base_SdssCentroid",
+    add("forced2", [
         "base_GaussianFlux",
-        "base_PsfFlux",
         "ext_photometryKron_KronFlux",   # not in lsst 1.1 data
-        "base_SdssShape",
         "modelfit_DoubleShapeletPsfApprox",   # not in lsst 1.1 data
         "undeblended_base_PsfFlux",
         "undeblended_ext_photometryKron_KronFlux",  # not in lsst 1.1 data
     ])
 
-    add("_forced:part3", [
+    add("forced3", [
         "base_CircularApertureFlux",
         "undeblended_base_CircularApertureFlux",   # not in lsst 1.1 data
+        "base_TransformedCentroid",
+        "base_TransformedShape",
+        "multi_coord",
     ])
 
     # Put this back in for Run1.2
     # NOTE:  This code will no longer work for 1.1
-    add("_forced:part4", [
+    add("forced4", [
         "ext_convolved_ConvolvedFlux",
+    ])
+
+    add("forced5", [
+        "undeblended_ext_convolved_ConvolvedFlux",
     ])
 
     if algos:
@@ -846,11 +834,9 @@ def get_an_existing_catalog_id(rerunDir, schemaName):
     pattern = get_catalog_path(rerunDir, "*", "*", "*", False, schemaName)
 
     for catPath in itertools.chain(glob.iglob(pattern), glob.iglob(pattern + ".gz")):
-        #print('catPath is: ', catPath)
         tract, patch, filter = lib.common.path_decompose(catPath)
-        #print('tract={tract}, patch={patch}, filter={filter}'.format(**locals()))
+
         refPath = get_ref_path(rerunDir, tract, patch)
-        #print('refPath is {refPath}'.format(**locals()))
         if lib.common.path_exists(refPath):
             return tract, patch, filter
 
@@ -889,9 +875,10 @@ def is_patch_already_inserted(cursor, schemaName, tract, patch, filters):
 
     if cursor is None:  return False
 
-    # The files that need registering include a "ref" file as well as multiband files.
-    # We address this problem by giving filter ID 0  (or file_id minFileId) to the "ref" file,
-    # and letting actual filter IDs start with 1.
+    # The files that need registering include a "ref" file as well as 
+    # multiband files.
+    # We address this problem by giving filter ID 0  (or file_id minFileId) 
+    # to the "ref" file, and letting actual filter IDs start with 1.
     fileId = [minFileId] + sorted(patchId*100 + lib.common.filterOrder[f]+1 for f in filters)
 
     cursor.execute("""
@@ -945,12 +932,13 @@ def extract_schema_fields(schemaName):
     (single digit), D is minor version (one or more digits) and 
     S is simulator type (one of 'p' or 'i').   Return a triple
     (major-version, minor-version, sim-type)
+    Optionally allow _ followed by a "word" (all lower case letters)
     @param schemaName
     """
     if schemaName is None: 
         return(None, None, None)
 
-    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)\Z'
+    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)(_[a-z]+)?\Z'
     result = re.match(pat, schemaName)
     if result:
         return(result.group(0), result.group(1), result.group(2))

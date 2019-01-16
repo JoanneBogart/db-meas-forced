@@ -13,30 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-
-NDEBUG = True
-#NDEBUG = False
-MULTICORE = True
-
-withSkymapWcs = ""
-
-tableSpace = ""
-indexSpace = ""
-
-dbServer = {
-    'dbname': os.environ.get("USER", "postgres"),
-}
+from .. import algobase
 
 
-def get_table_space():
-    if tableSpace:
-        return 'TABLESPACE "{}"'.format(tableSpace)
-    else:
-        return ''
+class Algo_footprint(algobase.Algo):
+    renamerules = [
+    ]
 
-def get_index_space():
-    if indexSpace:
-        return 'TABLESPACE "{}"'.format(indexSpace)
-    else:
-        return ''
+    def __init__(self, sourceTable):
+        self.sourceTable = sourceTable.cutout_subtable("footprint")

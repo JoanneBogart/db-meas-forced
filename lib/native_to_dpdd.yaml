@@ -1,0 +1,158 @@
+# Each dict in in the list below may have the following keys:
+# NativeInputs  (required) - list of column names as they appear in Fits headers
+#     except that certain substitutions may be specified by using substrings 
+#     {BAND}, {FLUX}, {ERR}. Code interpreting the YAML should substitute for
+#     FLUX and ERR as appropriate, depending on schema version of fits files.
+# DPDDname (required)   Output name.  Supports substitutions like NativeInputs
+# Datatype (optional)   May be any of int, long, double, float (default), flag.
+# Lambda (optional)   Expression (as string) needed to compute dpdd quantity
+# RPN (optional) RPN-like representation of how to compute dpdd quantity.
+# When neither Lambda nor RPN is present, output is just set to value of input 
+#      (should be only one item in the list)
+#
+# See also the file postgres_override.yaml
+- 
+    NativeInputs:   [id]
+    Datatype: long
+    DPDDname: objectId
+- 
+    NativeInputs: [parent]
+    Datatype: long
+    DPDDname: parentObjectId
+- 
+    NativeInputs: [coord_ra]
+    Datatype: double
+    DPDDname: ra
+- 
+    NativeInputs: [coord_dec]
+    Datatype: double
+    DPDDname: dec
+-
+    NativeInputs: [base_SdssCentroid_x]
+    Datatype: double
+    DPDDname:   x
+-
+    NativeInputs: [base_SdssCentroid_y]
+    Datatype: double
+    DPDDname:   y
+-
+    NativeInputs: ['base_SdssCentroid_x{ERR}']
+    Datatype: double
+    DPDDname:   xErr
+-
+    NativeInputs: ['base_SdssCentroid_y{ERR}']
+    Datatype: double
+    DPDDname:   yErr
+-
+    NativeInputs: [base_SdssCentroid_flag]
+    Datatype: flag
+    DPDDname: xy_flag
+-
+    NativeInputs: [base_PsfFlux_area]
+    DPDDname: psNdata
+-
+    NativeInputs: [base_ClassificationExtendedness_value]
+    DPDDname:  extendedness
+-
+    NativeInputs: ['base_Blendedness_abs_{FLUX}']
+    DPDDname: blendedness
+-
+    NativeInputs: [ext_shapeHSM_HsmSourceMoments_xx]
+    DPDDname: Ixx
+-
+    NativeInputs: [ext_shapeHSM_HsmSourceMoments_yy]
+    DPDDname: Iyy
+-
+    NativeInputs: [ext_shapeHSM_HsmSourceMoments_xy]
+    DPDDname: Ixy
+-
+    NativeInputs: [ext_shapeHSM_HsmSourceMoments_flag]
+    DPDDname: I_flag
+    Datatype: flag
+-
+    NativeInputs: [base_SdssShape_psf_xx]
+    DPDDname:   IxxPSF
+-
+    NativeInputs: [base_SdssShape_psf_yy]
+    DPDDname:   IyyPSF
+-
+    NativeInputs: [base_SdssShape_psf_xy]
+    DPDDname:   IxyPSF
+-
+    NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}']
+    DPDDname: 'mag_{BAND}_cModel'
+    Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
+    RPN: [27.0,x1,'log()',-2.5, '*','+']
+    #RPN: [x1, '_forced:export_mag()']
+-
+    NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}', 
+                   '{BAND}_modelfit_CModel_{FLUX}{ERR}']
+    DPDDname: 'magerr_{BAND}_cModel'
+    Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
+    RPN: [x1,'log()',x1, '*', 2.5,x2,'*','/']
+    # RPN: [x2, x1, '_forced:export_magerr(,)'] 
+-
+    NativeInputs: ['{BAND}_modelfit_CModel_{FLUX}',
+                   '{BAND}_modelfit_Cmodel_{FLUX}{ERR}']
+    DPDDname: 'snr_{BAND}_cModel'
+    Lamda:  'lambda x,y: np.divide(x,y)' 
+    RPN:      [x2,x1,'/']
+- 
+    NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
+    DPDDname: 'psFlux_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_PsfFlux_flag']
+    DPDDname: 'psFlux_flag_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_psfFlux_{FLUX}{ERR}']
+    DPDDname: 'psFluxErr_{BAND}'
+- 
+    NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}']
+    DPDDname: 'mag_{BAND}'
+    Lambda: 'lambda x: -2.5 * np.log10(x) + 27.0'
+    RPN: [27.0,x1,'log()',-2.5, '*','+']
+    #RPN: [x1, '_forced:export_mag()']
+- 
+    NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}', '{BAND}_base_PsfFlux_{FLUX}{ERR}' ]
+    DPDDname: 'magerr_{BAND}'
+    Lambda: 'lambda x,y: (2.5 * y) / (x* np.log10(x))'
+    RPN: [x1,'log()',x1, '*', 2.5,x2,'*','/']
+    #RPN: [x2, x1, '_forced:export_magerr(,)'] 
+-
+    NativeInputs: ['{BAND}_base_SdssShape_flag']
+    DPDDname: 'I_flag_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_xx']
+    DPDDname: 'Ixx_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_yy']
+    DPDDname: 'Iyy_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_xy']
+    DPDDname: 'Ixy_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_psf_xx']
+    DPDDname: 'IxxPSF_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_psf_yy']
+    DPDDname: 'IyyPSF_{BAND}'
+-
+    NativeInputs: ['{BAND}_base_SdssShape_psf_xy']
+    DPDDname: 'IxyPSF_{BAND}'
+-
+    NativeInputs: [base_PixelFlags_flag_edge,base_PixelFlags_flag_interpolatedCenter,base_PixelFlags_flag_saturatedCenter,base_PixelFlags_flag_crCenter,base_PixelFlags_flag_bad,base_PixelFlags_flag_suspectCenter,base_PixelFlags_flag_clipped]
+    DPDDname:     good
+    Datatype:     flag
+    #Lambda:       'lambda x: not x'
+    RPN:          [x1, x2, 'or', x3, 'or', x4, 'or', x5, 'or', x6, 'or', x7, 'or', 'not']
+-
+    NativeInputs: [base_PixelFlags_flag_edge,base_PixelFlags_flag_interpolatedCenter,base_PixelFlags_flag_saturatedCenter,base_PixelFlags_flag_crCenter,base_PixelFlags_flag_bad,base_PixelFlags_flag_suspectCenter,base_PixelFlags_flag_clipped, deblend_skipped]
+    DPDDname:     clean
+    Datatype:     flag
+    #Lambda:       'lambda x, y: not (x or y)'
+    RPN:          [x1, x2, 'or', x3, 'or', x4, 'or', x5, 'or', x6, 'or', x7, 'or', x8, 'or', 'not']
+-
+    NativeInputs: ['{BAND}_base_SdssShape_psf_xx', '{BAND}_base_SdssShape_psf_yy','{BAND}_base_SdssShape_psf_xy']
+    DPDDname:     'psf_fwhm_{BAND}'
+    Lambda:       'lambda xx, yy, xy: pixel_scale * 2.355 * (xx * yy - xy * xy) ** 0.25'
+    RPN:          ['0.25', x3, x3, '*', x1, x2, '*', '-', '^', '2.355', '*', '{PIXEL_SCALE}', '*']

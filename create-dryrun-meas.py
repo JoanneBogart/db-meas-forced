@@ -41,6 +41,8 @@ import textwrap
 
 def main():
     import argparse
+    cmdline = ' '.join(sys.argv)
+    print('Invocation: ' + cmdline)
     parser = argparse.ArgumentParser(
         fromfile_prefix_chars='@',
         description='Read a rerun directory to create "meas" summary table.')
@@ -118,8 +120,9 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
 
     db = lib.common.new_db_connection()
     with db.cursor() as cursor:
+        # In case no views were created, modify this test to use a table
         try:
-            cursor.execute('SELECT 0 FROM "{schemaName}"."{masterTableName}" WHERE FALSE;'.format(**locals()))
+            cursor.execute('SELECT 0 FROM "{schemaName}"."_{masterTableName}:position" WHERE FALSE;'.format(**locals()))
         except psycopg2.ProgrammingError:
             bNeedCreating = True
             db.rollback()
@@ -178,6 +181,8 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     for table in itertools.chain([tablePosition], multibands.values()):
         table.create(cursor, schemaName)
 
+    #   NO VIEWS!  Much commented out below
+
     # Create master table
     commentOnTable = textwrap.dedent("""
     The summary table of unforced measurements on coadd images.
@@ -223,88 +228,88 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     # Because the number of columns exceeds PostgreSQL's limit,
     # we divide the master table into "meas", "meas2", "meas3", ...
 
-    listUniversals = [ {"meas_position": tablePosition} ]
-    listMultibands = [ multibands ]
-    listMultibands.append(multibands.pop_many([
-        "_meas:part2"
-    ]))
-    listMultibands.append(multibands.pop_many([
-        "_meas:part3",
-    ]))
-    listMultibands.append(multibands.pop_many([
-        "_meas:part4",
-    ]))
+    # listUniversals = [ {"meas_position": tablePosition} ]
+    # listMultibands = [ multibands ]
+    # listMultibands.append(multibands.pop_many([
+    #     "_meas:part2"
+    # ]))
+    # listMultibands.append(multibands.pop_many([
+    #     "_meas:part3",
+    # ]))
+    # listMultibands.append(multibands.pop_many([
+    #     "_meas:part4",
+    # ]))
 
-    for iPart, (universals, multibands) in enumerate(
-        itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
-        start=1
-    ):
-        dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
-        if len(dbTables) > 1:
-            dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
-                'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
-                for table in dbTables[1:]
-            ]
-            dbTables = """
-            """.join(dbTables)
-        else:
-            dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
+    # for iPart, (universals, multibands) in enumerate(
+    #     itertools.zip_longest(listUniversals, listMultibands, fillvalue=PoppingOrderedDict()),
+    #     start=1
+    # ):
+    #     dbTables = [table.name for table in itertools.chain(universals.values(), multibands.values())]
+    #     if len(dbTables) > 1:
+    #         dbTables = [ '"{}"."{}"'.format(schemaName, dbTables[0]) ] + [
+    #             'LEFT JOIN "{}"."{}" USING (object_id)'.format(schemaName, table)
+    #             for table in dbTables[1:]
+    #         ]
+    #         dbTables = """
+    #         """.join(dbTables)
+    #     else:
+    #         dbTables = '"{}"."{}"'.format(schemaName, dbTables[0])
 
-        fieldDefs = []
-        for table in universals.values():
-            fieldDefs += table.get_exported_fields("")
+    #     fieldDefs = []
+    #     for table in universals.values():
+    #         fieldDefs += table.get_exported_fields("")
 
-        for filter in filters:
-            for table in multibands.values():
-                fieldDefs += table.get_exported_fields(filter)
+    #     for filter in filters:
+    #         for table in multibands.values():
+    #             fieldDefs += table.get_exported_fields(filter)
 
-        fieldDefs.insert(0, ("object_id", "object_id", "",
-            "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
-        ))
+    #     fieldDefs.insert(0, ("object_id", "object_id", "",
+    #         "Unique ID in 64bit integer. Be careful not to have it converted to a 32bit integer or 64bit floating point."
+    #     ))
 
-        sFieldDefs = """,
-        """.join(
-            '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
-        )
+    #     sFieldDefs = """,
+    #     """.join(
+    #         '{} AS {}'.format(definition, name) for name, definition, unit, doc in fieldDefs
+    #     )
 
-        tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
+    #     tableName = "{masterTableName}{iPart}".format(**locals()) if iPart > 1 else masterTableName
 
-        view_string = """
-        CREATE VIEW "{schemaName}"."{tableName}" AS (
-            SELECT
-                {sFieldDefs}
-            FROM
-                {dbTables}
-        )
-        """.format(**locals())
+    #     view_string = """
+    #     CREATE VIEW "{schemaName}"."{tableName}" AS (
+    #         SELECT
+    #             {sFieldDefs}
+    #         FROM
+    #             {dbTables}
+    #     )
+    #     """.format(**locals())
 
-        if cursor is not None:
-            cursor.execute(view_string)
-        else:
-            print(view_string)
+    #     if cursor is not None:
+    #         cursor.execute(view_string)
+    #     else:
+    #         print(view_string)
 
-        for name, definition, unit, doc in fieldDefs:
-            field_string = """
-            COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
-            """.format(**locals())
-            arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
+        # for name, definition, unit, doc in fieldDefs:
+        #     field_string = """
+        #     COMMENT ON COLUMN "{schemaName}"."{tableName}"."{name}" IS %(comment)s
+        #     """.format(**locals())
+        #     arg_dict = dict(comment = "{doc} || {unit}".format(**locals()))
 
-            if cursor is not None:
-                cursor.execute(field_string, arg_dict)
-            else:
-                print(field_string)
-                print(' to be bound with dict:  ', arg_dict)
+        #     if cursor is not None:
+        #         cursor.execute(field_string, arg_dict)
+        #     else:
+        #         print(field_string)
+        #         print(' to be bound with dict:  ', arg_dict)
 
-        table_comment="""
-        COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
-        """.format(**locals())
-        arg_dict = dict(comment = commentOnTable)
+        # table_comment="""
+        # COMMENT ON VIEW "{schemaName}"."{tableName}" IS %(comment)s
+        # """.format(**locals())
+        # arg_dict = dict(comment = commentOnTable)
         
-        if cursor is not None:
-            cursor.execute(table_comment, arg_dict)
-        else:
-            print(table_comment)
-            print(' to be bound with dict: ',arg_dict)
+        # if cursor is not None:
+        #     cursor.execute(table_comment, arg_dict)
+        # else:
+        #     print(table_comment)
+        #     print(' to be bound with dict: ',arg_dict)
 
 def insert_into_mastertable(rerunDir, schemaName, masterTableName, filters,
                             dryrun, tracts):
@@ -363,7 +368,9 @@ def insert_patch_into_mastertable(rerunDir, schemaName, masterTableName, filters
 
     if not catPaths:
         return
-
+    #if patch < 707:    #  TEMPORARY FOR TRACT 4431 ONLY
+    #    lib.misc.warning("Patch {patch} already inserted".format(**locals()))
+    #    return
     db = lib.common.new_db_connection()
     with db.cursor() as cursor:
         if not dryrun:
@@ -635,7 +642,7 @@ class DBTable_Position(lib.dbtable.DBTable_BandIndependent):
             "{self.name}_parent_id_idx"
         ON
             "{schemaName}"."{self.name}"
-            ( parent_id
+            ( parent
             )
         {indexSpace}
         """.format(**locals())
@@ -762,6 +769,8 @@ def is_patch_already_inserted(cursor, schemaName, tract, patch, filters):
     minFileId =  patchId   *100
     maxFileId = (patchId+1)*100 - 1
 
+    if cursor is None:  return False
+
     # Filter ID 0 is reserved and actual filter IDs start with 1, hence "filterOrder[f]+1"
     fileId = sorted(patchId*100 + lib.common.filterOrder[f]+1 for f in filters)
 
@@ -771,8 +780,6 @@ def is_patch_already_inserted(cursor, schemaName, tract, patch, filters):
     )
     """.format(**locals())
     )
-
-    if cursor is None:   return False
 
     cursor.execute("""
     SELECT file_id FROM "{schemaName}"."_temp:meas_patch" WHERE

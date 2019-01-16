@@ -5,3 +5,4 @@
 obj/
 skymap_wcs/
 tractGraph.pickle
+local/
