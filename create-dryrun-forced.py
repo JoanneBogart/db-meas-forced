@@ -79,6 +79,8 @@ def main():
                         default=False)
     parser.add_argument('--tracts', dest='tracts', type=int, nargs='+', 
                         help="Ingest data for specified tracts only if present. Else ingest all")
+    parser.add_argument('--imageRerunDir', default=None, 
+                        help="Root dir for finding images; defaults to rerunDir")
     args = parser.parse_args()
 
     if args.tracts is not None:
@@ -98,7 +100,8 @@ def main():
     else:
         print("Invoking create_mastertable_if_not_exists")
         create_mastertable_if_not_exists(args.rerunDir, args.schemaName, 
-                                         args.table_name, filters, args.dryrun)
+                                         args.table_name, filters, args.dryrun,
+                                         args.imageRerunDir)
         sys.stdout.flush()
         sys.stderr.flush()
         if args.tracts: 
@@ -112,7 +115,7 @@ def main():
                                     tracts)
 
 def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName, 
-                                     filters, dryrun):
+                                     filters, dryrun, imageRerunDir):
     """
     Create the master table if it does not exist.
     @param rerunDir
@@ -156,7 +159,8 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             with db.cursor() as cursor:
                 cursor.execute(create_schema_string)
                 dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
-                                               masterTableName, filters)
+                                               masterTableName, filters,
+                                               imageRerunDir)
                 create_view(cursor, schemaName, dm_schema)
             db.commit()
         else:
@@ -181,7 +185,8 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             print(create_schema_string)
             cursor = None
             dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
-                                           masterTableName, filters)
+                                           masterTableName, filters, 
+                                           imageRerunDir)
             create_view(cursor, schemaName, dm_schema)
         else:
             print("Master table already exists")
@@ -189,9 +194,11 @@ def create_mastertable_if_not_exists(rerunDir, schemaName, masterTableName,
             print(create_schema_string)
             cursor = None
             dm_schema = create_mastertable(cursor, rerunDir, schemaName, 
-                                           masterTableName, filters)
+                                           masterTableName, filters, 
+                                           imageRerunDir)
             create_view(cursor, schemaName, dm_schema)
-def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
+def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters,
+                       imageRerunDir):
     """
     Create the tables
 
@@ -209,6 +216,7 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
         List of filter names
     """
 
+    if imageRerunDir == None: imageRerunDir = rerunDir
     tract, patch, filter = get_an_existing_catalog_id(rerunDir, schemaName)
     catPath = get_catalog_path(rerunDir, tract, patch, filter, hsc=False,
                                schemaName=schemaName)
@@ -224,7 +232,7 @@ def create_mastertable(cursor, rerunDir, schemaName, masterTableName, filters):
     for table in itertools.chain(universals.values(), multibands.values()):
         #if ('position' in table.name):
         #    print("About to transform table ", table.name)
-        table.transform(rerunDir, tract, patch, filter, coord)
+        table.transform(imageRerunDir, tract, patch, filter, coord)
 
     # Create source tables
     for table in itertools.chain(universals.values(), multibands.values()):
