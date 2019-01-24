@@ -182,14 +182,23 @@ class DpddView(object):
         if self.yaml_override:
             override_yaml = DpddYaml(open(self.yaml_override)).parse()
             for i in override_yaml:
-                # Find elt in dpdd_yaml with same DPDDname
-                # delete
-                # add override entry instead.
+                found = False
+                # If find elt in dpdd_yaml with same DPDDname
+                #   delete
+                #   add override entry instead.
+                # else just add it
                 for j in dpdd_yaml:
                     if j['DPDDname'] == i['DPDDname']:
+                        found = True
                         j['NativeInputs'] = i['NativeInputs']
                         for key in ['Datatype', 'RPN']:
                             if key in i: j[key] = i[key]
+                        break
+
+                if not found:
+                    new_elt = dict(i)
+                    dpdd_yaml.append(new_elt)
+
 
         fields = []
         for i in dpdd_yaml:
