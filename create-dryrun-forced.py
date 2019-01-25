@@ -823,6 +823,7 @@ def get_catalog_path(rerunDir, tract, patch, filter, hsc=True, schemaName=None):
         return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/forced_src-{filter}-{tract}-{x},{y}.fits".format(**locals())
     else:
         (major, minor, sim_type) = extract_schema_fields(schemaName)
+        #print('extract_schema_fields found major={major}, minor={minor}'.format(**locals()))
         if major == None or (str(major) == '1' and str(minor) == '1'):
             return "{rerunDir}/deepCoadd-results/{filter}/{tract}/{x},{y}/forced-{filter}-{tract}-{x},{y}.fits".format(**locals())
         else:
@@ -832,6 +833,7 @@ def get_an_existing_catalog_id(rerunDir, schemaName):
     Get any one triple (tract, patch, filter) for which catalog files exist
     """
     pattern = get_catalog_path(rerunDir, "*", "*", "*", False, schemaName)
+    #print('pattern from get_catalog_path is {pattern}'.format(**locals()))
 
     for catPath in itertools.chain(glob.iglob(pattern), glob.iglob(pattern + ".gz")):
         tract, patch, filter = lib.common.path_decompose(catPath)
@@ -938,10 +940,10 @@ def extract_schema_fields(schemaName):
     if schemaName is None: 
         return(None, None, None)
 
-    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)(_[a-z]+)?\Z'
+    pat = '\A[-_a-zA-Z]+([0-9])([0-9]+)(i|p)(_[a-z]+[a-z,0-9]*)?\Z'
     result = re.match(pat, schemaName)
     if result:
-        return(result.group(0), result.group(1), result.group(2))
+        return(result.group(1), result.group(2), result.group(3))
     else:
         return(None, None, None)
 if __name__ == "__main__":
