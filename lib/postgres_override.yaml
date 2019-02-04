@@ -33,3 +33,7 @@
   NativeInputs: ['{BAND}_base_PsfFlux_{FLUX}', '{BAND}_base_PsfFlux_{FLUX}{ERR}' ]
   DPDDname: 'magerr_{BAND}'
   RPN: [x2, x1, '_forced:export_magerr(,)']
+-
+  NativeInputs: ['coord']
+  DPDDname: 'coord'
+  Datatype: 'Earth'
