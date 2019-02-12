@@ -227,8 +227,8 @@ if __name__ =='__main__':
     if len(sys.argv) > 2: 
         override_file = sys.argv[2] 
     else: override_file = None
-
-    view = DpddView('run12p_native', yaml_path = yaml_file, 
+    schema = 'run12p_v4'
+    view = DpddView(schema, yaml_path = yaml_file, 
                     yaml_override = override_file,
                     dm_schema_version = 3)
 
@@ -236,7 +236,7 @@ if __name__ =='__main__':
 
     print(cv)
 
-    res = DpddView.rpn_value(['the_first', 'the_second'],
-                             ['x1', 'x2', '+','x1','*'])
+    #res = DpddView.rpn_value(['the_first', 'the_second'],
+    #                         ['x1', 'x2', '+','x1','*'])
 
-    print(res)
+    #print(res)
